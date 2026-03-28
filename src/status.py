@@ -1,7 +1,14 @@
+"""Status-Berechnung für invoices."""
+
 import json
 import sqlite3
 
 DB = "rechnungsverwaltung.db"
+PARAM_PATH = "parameters.json"
+
+
+def load_params():
+    with open(PARAM_PATH, encoding="utf-8") as f:
 
 
 def load_params(path="parameters.json"):
@@ -33,6 +40,7 @@ def update_all():
     rows = conn.execute("SELECT * FROM invoices").fetchall()
     for inv in rows:
         status, dev = compute_status_row(inv, tolerance)
+        conn.execute("UPDATE invoices SET status=?, deviation_eur=? WHERE invoice_id=?", (status, dev, inv["invoice_id"]))
         conn.execute(
             "UPDATE invoices SET status = ?, deviation_eur = ? WHERE invoice_id = ?",
             (status, dev, inv["invoice_id"]),
