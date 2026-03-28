@@ -9,6 +9,10 @@ PARAM_PATH = "parameters.json"
 
 def load_params():
     with open(PARAM_PATH, encoding="utf-8") as f:
+
+
+def load_params(path="parameters.json"):
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -37,6 +41,10 @@ def update_all():
     for inv in rows:
         status, dev = compute_status_row(inv, tolerance)
         conn.execute("UPDATE invoices SET status=?, deviation_eur=? WHERE invoice_id=?", (status, dev, inv["invoice_id"]))
+        conn.execute(
+            "UPDATE invoices SET status = ?, deviation_eur = ? WHERE invoice_id = ?",
+            (status, dev, inv["invoice_id"]),
+        )
 
     conn.commit()
     conn.close()

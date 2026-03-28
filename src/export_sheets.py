@@ -23,6 +23,7 @@ def export_all() -> None:
     if not os.path.exists(SERVICE_ACCOUNT_FILE):
         raise FileNotFoundError(f"Service account file not found: {SERVICE_ACCOUNT_FILE}")
 
+def main() -> None:
     creds = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE,
         scopes=SCOPES,
@@ -39,6 +40,18 @@ def export_all() -> None:
         range_a1 = f"'{title}'!A1:{col_letter(col_count)}{row_count}"
 
         print(f"Exporting: {title} -> data/{title.replace(' ', '_')}.json ({range_a1})")
+
+    meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+    sheets = meta["sheets"]
+    os.makedirs("data", exist_ok=True)
+
+    for s in sheets:
+        title = s["properties"]["title"]
+        row_count = s["properties"]["gridProperties"].get("rowCount", 1000)
+        col_count = s["properties"]["gridProperties"].get("columnCount", 26)
+
+        range_a1 = f"'{title}'!A1:{col_letter(col_count)}{row_count}"
+        print("Export:", title, range_a1)
         resp = (
             service.spreadsheets()
             .values()
@@ -58,3 +71,15 @@ def export_all() -> None:
 if __name__ == "__main__":
     export_all()
     print("Export abgeschlossen. JSON-Dateien liegen im data/-Verzeichnis.")
+        out_path = f"data/{title.replace(' ', '_')}.json"
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {"title": title, "values": resp.get("values", [])},
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+
+
+if __name__ == "__main__":
+    main()
