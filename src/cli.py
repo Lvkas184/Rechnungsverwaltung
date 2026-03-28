@@ -3,12 +3,10 @@
 import argparse
 import subprocess
 
-from import_to_db import import_data
-import argparse
-
-from mahnung import run_mahnung
-from matching import apply_matching
-from status import update_all
+from src.import_to_db import import_data
+from src.matching import apply_matching
+from src.status import update_all
+from src.mahnung import run_mahnung
 
 
 def main():
@@ -24,23 +22,7 @@ def main():
         subprocess.run(["python", "src/export_sheets.py"], check=False)
     if args.do_import:
         import_data()
-    if args.match:
-        apply_matching()
-    if args.status:
-        update_all()
-    if args.mahnung:
-        run_mahnung()
-
-
-if __name__ == "__main__":
-    main()
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--match", action="store_true")
-    parser.add_argument("--status", action="store_true")
-    parser.add_argument("--mahnung", action="store_true")
-    args = parser.parse_args()
-
+        print("Import abgeschlossen.")
     if args.match:
         apply_matching()
         print("Matching done.")
@@ -50,3 +32,7 @@ if __name__ == "__main__":
     if args.mahnung:
         run_mahnung()
         print("Mahnungen verarbeitet.")
+
+
+if __name__ == "__main__":
+    main()

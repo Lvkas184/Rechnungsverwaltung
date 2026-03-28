@@ -1,26 +1,24 @@
-"""Mahnlogik für offene Rechnungen basierend auf issue_date."""
+"""Mahnlogik für offene Rechnungen basierend auf issue_date.
+
+Sets reminder_status to '1. Mahnung' or '2. Mahnung' depending on
+how many days have passed since issue_date vs. the configured thresholds.
+"""
 
 import json
 import sqlite3
 from datetime import datetime
 
-DB = "rechnungsverwaltung.db"
-PARAM_PATH = "parameters.json"
+from src.db import PARAM_PATH
 
 
-def load_params():
-    with open(PARAM_PATH, encoding="utf-8") as f:
-
-
-def load_params(path="parameters.json"):
+def load_params(path=PARAM_PATH):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def run_mahnung():
+    """Evaluate reminder status for every unpaid invoice."""
     p = load_params()
-    d1 = int(p.get("due_days_1", 30))
-    d2 = int(p.get("due_days_2", 60))
     due_1 = int(p.get("due_days_1", 30))
     due_2 = int(p.get("due_days_2", 60))
     today = datetime.utcnow().date()
@@ -35,28 +33,19 @@ def run_mahnung():
             continue
         try:
             issue = datetime.fromisoformat(issue_date).date()
-        except Exception:
-        except ValueError:
+        except (ValueError, TypeError):
             continue
 
         if inv["status"] == "Bezahlt":
             continue
 
         days = (today - issue).days
-        if days >= d2:
-            conn.execute(
-                "UPDATE invoices SET reminder_status=?, reminder_date=? WHERE invoice_id=?",
-                ("2. Mahnung", today.isoformat(), inv["invoice_id"]),
-            )
-        elif days >= d1:
-            conn.execute(
-                "UPDATE invoices SET reminder_status=?, reminder_date=? WHERE invoice_id=?",
-        if days > due_2:
+        if days >= due_2:
             conn.execute(
                 "UPDATE invoices SET reminder_status = ?, reminder_date = ? WHERE invoice_id = ?",
                 ("2. Mahnung", today.isoformat(), inv["invoice_id"]),
             )
-        elif days > due_1:
+        elif days >= due_1:
             conn.execute(
                 "UPDATE invoices SET reminder_status = ?, reminder_date = ? WHERE invoice_id = ?",
                 ("1. Mahnung", today.isoformat(), inv["invoice_id"]),

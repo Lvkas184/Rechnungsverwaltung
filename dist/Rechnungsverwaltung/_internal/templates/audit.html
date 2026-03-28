@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Audit-Log — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<h1>📋 Audit-Log <span class="count-badge">{{ total }}</span></h1>
+<p class="page-desc">Protokoll aller automatischen Zuordnungen und Aktionen.</p>
+
+{% if logs %}
+<div class="table-responsive">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Nr.</th>
+            <th>Zahlung</th>
+            <th>Rechnung</th>
+            <th>Score</th>
+            <th>Regel</th>
+            <th>Automatisch</th>
+            <th>Zeitpunkt</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for log in logs %}
+        <tr>
+            <td>{{ log.audit_id }}</td>
+            <td>{{ log.payment_id or "—" }}</td>
+            <td>
+                {% if log.invoice_id %}
+                <a href="{{ url_for('rechnung_detail', invoice_id=log.invoice_id) }}">{{ log.invoice_id }}</a>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+            <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
+            <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
+            <td>{{ "Ja" if log.automated else "Nein" }}</td>
+            <td>{{ log.ts | format_date }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('audit', page=page-1) }}" class="btn btn-secondary">← Zurück</a>
+    {% endif %}
+    <span class="page-info">Seite {{ page }} von {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="{{ url_for('audit', page=page+1) }}" class="btn btn-secondary">Weiter →</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <p>Noch keine Audit-Einträge vorhanden.</p>
+</div>
+{% endif %}
+{% endblock %}

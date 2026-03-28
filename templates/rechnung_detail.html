@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Rechnung {{ inv.invoice_id }} — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<div class="detail-header">
+    <a href="{{ url_for('rechnungen') }}" class="btn btn-secondary">← Zurück</a>
+    <h1>Rechnung #{{ inv.invoice_id }}</h1>
+</div>
+
+<div class="detail-grid">
+    <div class="detail-card">
+        <h2>Rechnungsdaten</h2>
+        <dl class="detail-list">
+            <dt>Rechnungsnummer</dt>
+            <dd class="cell-id">{{ inv.invoice_id }}</dd>
+
+            <dt>Name / Kunde</dt>
+            <dd>{{ inv.name or "—" }}</dd>
+
+            <dt>Betrag (Brutto)</dt>
+            <dd class="cell-amount">{{ inv.amount_gross | format_eur }}</dd>
+
+            <dt>Rechnungsdatum</dt>
+            <dd>{{ inv.issue_date | format_date }}</dd>
+
+            <dt>Fälligkeitsdatum</dt>
+            <dd>{{ inv.due_date | format_date if inv.due_date else "—" }}</dd>
+        </dl>
+    </div>
+
+    <div class="detail-card">
+        <h2>Zahlungsstatus</h2>
+        <dl class="detail-list">
+            <dt>Status</dt>
+            <dd>
+                <span class="status-badge status-{{ inv.status | lower | replace('/', '-') | replace(' ', '-') if inv.status else 'offen' }}">
+                    {{ inv.status or "Offen" }}
+                </span>
+            </dd>
+
+            <dt>Bezahlt</dt>
+            <dd class="cell-amount">{{ inv.paid_sum_eur | format_eur }}</dd>
+
+            <dt>Abweichung</dt>
+            <dd class="cell-amount">{{ inv.deviation_eur | format_eur }}</dd>
+
+            <dt>Anzahl Zahlungen</dt>
+            <dd>{{ inv.payment_count or 0 }}</dd>
+
+            <dt>Letzte Zahlung</dt>
+            <dd>{{ inv.last_payment_date | format_date }}</dd>
+
+            <dt>Mahnung</dt>
+            <dd>
+                {% if inv.reminder_status %}
+                <span class="mahnung-badge">{{ inv.reminder_status }}</span>
+                ({{ inv.reminder_date | format_date }})
+                {% else %}
+                Keine
+                {% endif %}
+            </dd>
+        </dl>
+    </div>
+</div>
+
+{% if payments %}
+<h2>Zugeordnete Zahlungen ({{ payments | length }})</h2>
+<div class="table-responsive">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Quelle</th>
+            <th>Buchungsdatum</th>
+            <th>Betrag</th>
+            <th>Absender</th>
+            <th>Verwendungszweck</th>
+            <th>Score</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in payments %}
+        <tr>
+            <td>{{ p.payment_id }}</td>
+            <td><span class="badge">{{ p.source or "—" }}</span></td>
+            <td>{{ p.booking_date | format_date }}</td>
+            <td class="cell-amount">{{ p.amount_eur | format_eur }}</td>
+            <td>{{ p.beneficiary_name or "—" }}</td>
+            <td class="cell-ref">{{ p.reference_text[:80] if p.reference_text else "—" }}{{ "…" if p.reference_text and p.reference_text|length > 80 }}</td>
+            <td>{{ "%.0f%%"|format(p.match_score * 100) if p.match_score else "—" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>Keine Zahlungen zugeordnet.</p>
+</div>
+{% endif %}
+
+{% if audit %}
+<h2>Audit-Log</h2>
+<div class="table-responsive">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Nr.</th>
+            <th>Zahlung</th>
+            <th>Score</th>
+            <th>Regel</th>
+            <th>Zeitpunkt</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for log in audit %}
+        <tr>
+            <td>{{ log.audit_id }}</td>
+            <td>{{ log.payment_id or "—" }}</td>
+            <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
+            <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
+            <td>{{ log.ts | format_date }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

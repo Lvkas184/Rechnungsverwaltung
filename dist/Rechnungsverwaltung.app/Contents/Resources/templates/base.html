@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Rechnungsverwaltung — Rechnungen, Zahlungen und Mahnungen verwalten">
+    <title>{% block title %}Rechnungsverwaltung{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="main-nav">
+        <div class="nav-inner">
+            <a href="{{ url_for('dashboard') }}" class="nav-logo">📋 Rechnungsverwaltung</a>
+            <div class="nav-links">
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">🏠 Übersicht</a>
+                <a href="{{ url_for('rechnungen') }}" class="nav-link {% if request.endpoint in ('rechnungen', 'rechnung_detail') %}active{% endif %}">📄 Rechnungen</a>
+                <a href="{{ url_for('zahlungen') }}" class="nav-link {% if request.endpoint == 'zahlungen' %}active{% endif %}">💳 Zahlungen</a>
+                <a href="{{ url_for('upload') }}" class="nav-link {% if request.endpoint == 'upload' %}active{% endif %}">📤 Import</a>
+                <a href="{{ url_for('zuordnungen') }}" class="nav-link {% if request.endpoint == 'zuordnungen' %}active{% endif %}">🔗 Zuordnungen</a>
+                <form action="{{ url_for('shutdown') }}" method="POST" style="display:inline; margin-left: 10px;">
+                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Möchten Sie das Programm wirklich beenden?')">🛑 Beenden</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-container">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                {{ message }}
+                <button class="flash-close" onclick="this.parentElement.remove()">✕</button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="main-footer">
+        <p>Rechnungsverwaltung &copy; {{ now().year if now is defined else "2026" }}</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

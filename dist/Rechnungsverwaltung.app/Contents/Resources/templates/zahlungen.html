@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Zahlungen — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<h1>💳 Zahlungen <span class="count-badge">{{ total }}</span></h1>
+
+<div class="filter-bar">
+    <form method="GET" action="{{ url_for('zahlungen') }}" class="filter-form">
+        <input type="text" name="q" placeholder="🔍 Suche (Name, VWZ, ReNr)…" value="{{ search }}" class="search-input">
+        <select name="filter" class="filter-select" onchange="this.form.submit()">
+            <option value="">Alle</option>
+            <option value="matched" {{ 'selected' if filter_type == 'matched' }}>✅ Zugeordnet</option>
+            <option value="unmatched" {{ 'selected' if filter_type == 'unmatched' }}>❌ Nicht zugeordnet</option>
+        </select>
+        <button type="submit" class="btn btn-secondary">Suchen</button>
+    </form>
+</div>
+
+{% if payments %}
+<div class="table-responsive">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Quelle</th>
+            <th>Buchungsdatum</th>
+            <th>Betrag</th>
+            <th>Absender</th>
+            <th>Verwendungszweck</th>
+            <th>Rechnung</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in payments %}
+        <tr>
+            <td>{{ p.payment_id }}</td>
+            <td><span class="badge">{{ p.source or "—" }}</span></td>
+            <td>{{ p.booking_date | format_date }}</td>
+            <td class="cell-amount">{{ p.amount_eur | format_eur }}</td>
+            <td>{{ p.beneficiary_name or "—" }}</td>
+            <td class="cell-ref">{{ p.reference_text[:60] if p.reference_text else "—" }}{{ "…" if p.reference_text and p.reference_text|length > 60 }}</td>
+            <td>
+                {% if p.invoice_id %}
+                <a href="{{ url_for('rechnung_detail', invoice_id=p.invoice_id) }}">{{ p.invoice_id }}</a>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+            <td>
+                {% if p.matched == 1 %}
+                <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
+                {% else %}
+                <span class="status-badge status-offen">Offen</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('zahlungen', page=page-1, filter=filter_type, q=search) }}" class="btn btn-secondary">← Zurück</a>
+    {% endif %}
+    <span class="page-info">Seite {{ page }} von {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="{{ url_for('zahlungen', page=page+1, filter=filter_type, q=search) }}" class="btn btn-secondary">Weiter →</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <p>Keine Zahlungen gefunden.</p>
+    <a href="{{ url_for('upload') }}" class="btn btn-primary">📤 Kontoauszug importieren</a>
+</div>
+{% endif %}
+{% endblock %}

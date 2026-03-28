@@ -1,4 +1,12 @@
-"""Matching-Engine for payment-to-invoice allocation."""
+"""Matching-Engine for payment-to-invoice allocation.
+
+Rules (in priority order):
+1. Regex invoice-number extraction from reference_text
+2. Manual map lookup (exact signature, then substring)
+3. Exact amount + name match
+4. Fuzzy name + amount similarity
+5. Splitting for collective payments (Sammelzahlungen)
+"""
 
 import json
 import re
@@ -8,102 +16,80 @@ from difflib import SequenceMatcher
 
 try:
     from rapidfuzz import fuzz  # type: ignore
-except Exception:  # pragma: no cover
+except Exception:  # pragma: no cover — rapidfuzz is optional
     fuzz = None
 
-DB = "rechnungsverwaltung.db"
-PARAM_PATH = "parameters.json"
+from src.db import PARAM_PATH
 
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
 
 def load_params(path=PARAM_PATH):
-DB = "rechnungsverwaltung.db"
-
-try:
-    from rapidfuzz import fuzz  # type: ignore
-
-    def token_set_ratio(a: str, b: str) -> float:
-        return fuzz.token_set_ratio(a, b) / 100.0
-
-except Exception:
-
-    def token_set_ratio(a: str, b: str) -> float:
-        return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
-
-def load_parameters(path="parameters.json"):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
-params = load_params()
-TOLERANCE = float(params.get("Toleranz", 0.001))
-AUTO_THRESHOLD = float(params.get("match_score_auto", 0.85))
-REVIEW_THRESHOLD = float(params.get("match_score_review", 0.6))
-SPLIT_THRESHOLD = float(params.get("split_threshold", 0.01))
-
-RE_PATTERNS = [
-    re.compile(r"(?:RE(?:\.)?\s*Nr\.?|RN|RENr|ReNr|re\s*nr|re\.?\s*nr|Re\.*\s*Nr\.?)\s*[:\-]?\s*([0-9]{4,12})", re.I),
-PARAMS = load_parameters()
+PARAMS = load_params()
 TOLERANCE = float(PARAMS.get("Toleranz", 0.001))
 AUTO_THRESHOLD = float(PARAMS.get("match_score_auto", 0.85))
 REVIEW_THRESHOLD = float(PARAMS.get("match_score_review", 0.6))
 SPLIT_THRESHOLD = float(PARAMS.get("split_threshold", 0.01))
+
+
+# ---------------------------------------------------------------------------
+# Regex patterns for invoice-number detection
+# ---------------------------------------------------------------------------
 
 RE_PATTERNS = [
     re.compile(
         r"(?:RE(?:\.)?|RN|ReNr|RENr|re\s*nr|re\.?\s*nr|Re\.*\s*Nr\.?)\s*[:\-]?\s*([0-9]{4,12})",
         re.I,
     ),
-    re.compile(r"\b([0-9]{6,9})\b"),
+    re.compile(r"\b([0-9]{6,9})\b"),  # fallback: 6-9 digit numbers
 ]
 
 
 def extract_invoice_number(text):
+    """Return the first invoice number found in *text*, or None."""
     if not text:
         return None
-    for p in RE_PATTERNS:
-        m = p.search(str(text))
-        if m:
-            raw = m.group(1)
-            if len(raw) > 9:
-                raw = raw[:6]
-            try:
-                return int(raw)
-            except ValueError:
     value = str(text)
     for p in RE_PATTERNS:
         m = p.search(value)
         if m:
             try:
                 raw = m.group(1)
+                # Truncate overly long numbers (e.g. combined reference strings)
                 if len(raw) > 9:
                     raw = raw[:6]
                 return int(raw)
-            except Exception:
+            except (ValueError, IndexError):
                 continue
     return None
 
 
+# ---------------------------------------------------------------------------
+# Similarity helpers
+# ---------------------------------------------------------------------------
+
 def amount_similarity(a, b):
+    """Return 0..1 similarity between two monetary amounts."""
     try:
         if a is None or b is None:
             return 0.0
-        a = float(a)
-        b = float(b)
+        a, b = float(a), float(b)
         if a == b:
             return 1.0
         denom = max(abs(a), abs(b), 1.0)
         return max(0.0, 1 - abs(a - b) / denom)
     except Exception:
         return 0.0
-    if a is None or b is None:
-        return 0.0
-    if a == 0 and b == 0:
-        return 1.0
-    return max(0.0, 1 - abs(a - b) / max(abs(a), abs(b), 1.0))
 
 
 def name_similarity(a, b):
+    """Return 0..1 fuzzy similarity between two name strings."""
     if not a or not b:
         return 0.0
     if fuzz is not None:
@@ -112,13 +98,13 @@ def name_similarity(a, b):
 
 
 def compute_score(base_weight, name_score=0.0, amount_score=0.0):
+    """Weighted combination: base*0.6 + name*0.25 + amount*0.15."""
     return min(1.0, base_weight * 0.6 + name_score * 0.25 + amount_score * 0.15)
-    return token_set_ratio(str(a), str(b))
 
 
-def compute_score(rule_score, name_score=0.0, amount_score=0.0):
-    return min(1.0, rule_score * 0.6 + name_score * 0.25 + amount_score * 0.15)
-
+# ---------------------------------------------------------------------------
+# DB helpers
+# ---------------------------------------------------------------------------
 
 def load_db():
     conn = sqlite3.connect(DB)
@@ -129,56 +115,68 @@ def load_db():
 def find_invoice_by_id(conn, invoice_id):
     if not invoice_id:
         return None
-    return conn.execute("SELECT * FROM invoices WHERE invoice_id = ?", (invoice_id,)).fetchone()
+    return conn.execute(
+        "SELECT * FROM invoices WHERE invoice_id = ?", (invoice_id,)
+    ).fetchone()
 
 
 def find_candidates_by_amount(conn, amount, pct=0.05, limit=200):
+    """Return open invoices whose amount_gross is within ±pct of *amount*."""
     if amount is None:
-        return conn.execute("SELECT * FROM invoices WHERE status != 'Bezahlt' LIMIT ?", (limit,)).fetchall()
+        return conn.execute(
+            "SELECT * FROM invoices WHERE COALESCE(status, 'Offen') != 'Bezahlt' LIMIT ?",
+            (limit,),
+        ).fetchall()
     low = amount * (1 - pct)
     high = amount * (1 + pct)
     return conn.execute(
-        "SELECT * FROM invoices WHERE (status != 'Bezahlt' OR status IS NULL) AND amount_gross BETWEEN ? AND ? LIMIT ?",
-def find_candidates_by_amount(conn, amount, limit=50):
-    if amount is None:
-        return []
-    low = amount * (1 - 0.05)
-    high = amount * (1 + 0.05)
-    return conn.execute(
-        """
-        SELECT * FROM invoices
-        WHERE (COALESCE(paid_sum_eur,0) < COALESCE(amount_gross,0) OR status != 'Bezahlt')
-          AND amount_gross BETWEEN ? AND ?
-        LIMIT ?
-        """,
+        """SELECT * FROM invoices
+           WHERE (COALESCE(status, 'Offen') != 'Bezahlt')
+             AND amount_gross BETWEEN ? AND ?
+           LIMIT ?""",
         (low, high, limit),
     ).fetchall()
 
 
-def match_payment_row(conn, payment_row):
-    ref = payment_row["reference_text"]
-    amt = payment_row["amount_eur"]
-    ben = payment_row["beneficiary_name"] or ref
+# ---------------------------------------------------------------------------
+# Core matching logic
+# ---------------------------------------------------------------------------
 
+def match_payment_row(conn, payment):
+    """Attempt to match a single payment row to an invoice.
+
+    Returns a dict with keys: invoice_id, score, rule, and optionally split.
+    """
+    ref = payment["reference_text"]
+    amt = payment["amount_eur"]
+    ben = payment["beneficiary_name"] or ref or ""
+
+    # 1) Regex invoice number
     inv_id = extract_invoice_number(ref)
     if inv_id:
         inv = find_invoice_by_id(conn, inv_id)
         if inv:
-            return {"invoice_id": inv_id, "score": 1.0, "rule": "regex_invoice"}
+            return {"invoice_id": inv["invoice_id"], "score": 1.0, "rule": "regex_invoice"}
 
-    exact_map = conn.execute("SELECT mapped_invoice_id FROM manual_map WHERE signature = ?", (ref,)).fetchone()
-    if exact_map and exact_map["mapped_invoice_id"]:
-        inv = find_invoice_by_id(conn, exact_map["mapped_invoice_id"])
+    # 2) Manual map — exact signature
+    row = conn.execute(
+        "SELECT mapped_invoice_id FROM manual_map WHERE signature = ?",
+        (ref,),
+    ).fetchone()
+    if row and row["mapped_invoice_id"]:
+        inv = find_invoice_by_id(conn, row["mapped_invoice_id"])
         if inv:
             return {"invoice_id": inv["invoice_id"], "score": 0.95, "rule": "manual_map_exact"}
 
-    for row in conn.execute("SELECT mapped_invoice_id, signature FROM manual_map").fetchall():
-        signature = row["signature"]
-        if signature and ref and signature in ref:
-            inv = find_invoice_by_id(conn, row["mapped_invoice_id"])
+    # 2b) Manual map — substring match
+    for mrow in conn.execute("SELECT mapped_invoice_id, signature FROM manual_map").fetchall():
+        sig = mrow["signature"]
+        if sig and ref and sig in ref:
+            inv = find_invoice_by_id(conn, mrow["mapped_invoice_id"])
             if inv:
                 return {"invoice_id": inv["invoice_id"], "score": 0.92, "rule": "manual_map_contains"}
 
+    # 3) Exact amount + name contains
     if amt is not None:
         rows = conn.execute(
             "SELECT * FROM invoices WHERE amount_gross = ? AND name LIKE ? LIMIT 5",
@@ -187,24 +185,31 @@ def match_payment_row(conn, payment_row):
         if rows:
             return {"invoice_id": rows[0]["invoice_id"], "score": 0.9, "rule": "exact_amount_name"}
 
+    # 4) Fuzzy candidates by amount ±5% and name similarity
     best = None
     for inv in find_candidates_by_amount(conn, amt):
         nscore = name_similarity(inv["name"], ben)
         ascore = amount_similarity(amt, inv["amount_gross"])
         score = compute_score(0.85, nscore, ascore)
-        if not best or score > best["score"]:
+        if best is None or score > best["score"]:
             best = {"invoice_id": inv["invoice_id"], "score": score, "rule": "fuzzy_name_amount"}
 
-    if best:
-        if best["score"] >= AUTO_THRESHOLD:
-            return best
-        if best["score"] >= REVIEW_THRESHOLD:
-            return best
+    if best and best["score"] >= REVIEW_THRESHOLD:
+        return best
 
+    # 5) Splitting: detect "Sammel" keywords or very large payments
     text_lower = (ref or "").lower()
-    if "sammel" in text_lower or "sammelüberweisung" in text_lower or (amt and float(amt) > 10000):
+    if (
+        "sammel" in text_lower
+        or "sammelüberweisung" in text_lower
+        or "sammelueberweisung" in text_lower
+        or (amt and float(amt) > 10000)
+    ):
         invs = conn.execute(
-            "SELECT * FROM invoices WHERE status != 'Bezahlt' OR status IS NULL ORDER BY invoice_id ASC LIMIT 200"
+            """SELECT * FROM invoices
+               WHERE COALESCE(status, 'Offen') != 'Bezahlt'
+               ORDER BY invoice_id ASC
+               LIMIT 200"""
         ).fetchall()
         remaining = float(amt or 0)
         splits = []
@@ -220,122 +225,21 @@ def match_payment_row(conn, payment_row):
                 break
         if splits:
             return {"invoice_id": None, "score": 0.8, "rule": "split_collective", "split": splits}
-def match_payment_row(conn, payment):
-    inv_id = extract_invoice_number(payment["reference_text"])
-    if inv_id:
-        inv = find_invoice_by_id(conn, inv_id)
-        if inv:
-            return {"invoice_id": inv["invoice_id"], "score": 1.0, "rule": "regex_invoice"}
 
-    row = conn.execute(
-        "SELECT mapped_invoice_id FROM manual_map WHERE signature = ?",
-        (payment["reference_text"],),
-    ).fetchone()
-    if row:
-        inv = find_invoice_by_id(conn, row["mapped_invoice_id"])
-        if inv:
-            return {"invoice_id": inv["invoice_id"], "score": 0.95, "rule": "manual_map_exact"}
-
-    amount = payment["amount_eur"]
-    name = payment["beneficiary_name"] or payment["reference_text"] or ""
-
-    rows = conn.execute(
-        "SELECT * FROM invoices WHERE amount_gross = ? AND name LIKE ? LIMIT 5",
-        (amount, f"%{name}%"),
-    ).fetchall()
-    if rows:
-        return {"invoice_id": rows[0]["invoice_id"], "score": 0.9, "rule": "exact_amount_name"}
-
-    best = None
-    for inv in find_candidates_by_amount(conn, amount):
-        n_score = name_similarity(inv["name"], name)
-        a_score = amount_similarity(amount or 0, inv["amount_gross"] or 0)
-        score = compute_score(0.85, n_score, a_score)
-        if best is None or score > best["score"]:
-            best = {"invoice_id": inv["invoice_id"], "score": score, "rule": "fuzzy_name_amount"}
-
-    if best and best["score"] >= REVIEW_THRESHOLD:
-        return best
-
-    ref = str(payment["reference_text"] or "").lower()
-    if (
-        "sammel" in ref
-        or "sammelüberweisung" in ref
-        or "sammelueberweisung" in ref
-        or (payment["amount_eur"] and payment["amount_eur"] > 10000)
-    ):
-        invoices = conn.execute(
-            """
-            SELECT * FROM invoices
-            WHERE COALESCE(status,'Offen') != 'Bezahlt'
-            ORDER BY invoice_id ASC
-            LIMIT 100
-            """
-        ).fetchall()
-        remaining = payment["amount_eur"] or 0.0
-        assigned = []
-        for inv in invoices:
-            needed = (inv["amount_gross"] or 0.0) - (inv["paid_sum_eur"] or 0.0)
-            if needed <= 0:
-                continue
-            alloc = min(needed, remaining)
-            if alloc > 0:
-                assigned.append((inv["invoice_id"], alloc))
-                remaining -= alloc
-            if remaining <= SPLIT_THRESHOLD:
-                break
-        if assigned:
-            return {"invoice_id": None, "score": 0.8, "rule": "split_collective", "split": assigned}
-
+    # No match
     return {"invoice_id": None, "score": 0.0, "rule": "no_match"}
 
 
-def apply_matching(auto_commit=True):
-    conn = load_db()
-    rows = conn.execute("SELECT * FROM payments WHERE matched = 0 OR matched IS NULL").fetchall()
-    print(f"Zu matchende Zahlungen: {len(rows)}")
+# ---------------------------------------------------------------------------
+# Apply matching to all unmatched payments
+# ---------------------------------------------------------------------------
 
-    for p in rows:
-        res = match_payment_row(conn, p)
-
-        if res.get("invoice_id") and res.get("score", 0.0) >= AUTO_THRESHOLD:
-            conn.execute(
-                "UPDATE payments SET invoice_id=?, matched=1, match_score=?, match_rule=?, created_by='auto' WHERE payment_id=?",
-                (res["invoice_id"], res["score"], res["rule"], p["payment_id"]),
-            )
-            conn.execute(
-                "INSERT INTO audit_log(payment_id, invoice_id, match_score, rule_used, automated, user) VALUES (?,?,?,?,1,'system')",
-                (p["payment_id"], res["invoice_id"], res["score"], res["rule"]),
-            )
-            conn.execute(
-                "UPDATE invoices SET paid_sum_eur = COALESCE(paid_sum_eur,0) + ?, payment_count = COALESCE(payment_count,0)+1, last_payment_date = ? WHERE invoice_id=?",
-                (p["amount_eur"], datetime.utcnow().isoformat(), res["invoice_id"]),
-            )
-
-        elif res.get("rule") == "split_collective" and res.get("split"):
-            for inv_id, alloc in res["split"]:
-                conn.execute(
-                    "INSERT INTO payments(invoice_id, source, booking_date, value_date, amount_eur, reference_text, matched, match_score, match_rule, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (inv_id, p["source"], p["booking_date"], p["value_date"], alloc, p["reference_text"], 1, 0.8, "auto_split", "auto"),
-                )
-                child_payment_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-                conn.execute(
-                    "INSERT INTO audit_log(payment_id, invoice_id, match_score, rule_used, automated, user) VALUES (?,?,?,?,1,'system')",
-                    (child_payment_id, inv_id, 0.8, "auto_split"),
-                )
-                conn.execute(
-                    "UPDATE invoices SET paid_sum_eur = COALESCE(paid_sum_eur,0) + ?, payment_count = COALESCE(payment_count,0)+1, last_payment_date = ? WHERE invoice_id=?",
-                    (alloc, datetime.utcnow().isoformat(), inv_id),
-                )
-
-            conn.execute("UPDATE payments SET matched=1, match_rule='split_parent', created_by='auto' WHERE payment_id=?", (p["payment_id"],))
 def _apply_single_invoice(conn, payment, res):
+    """Write a single-invoice match to the DB."""
     conn.execute(
-        """
-        UPDATE payments
-        SET invoice_id = ?, matched = 1, match_score = ?, match_rule = ?, created_by = 'auto'
-        WHERE payment_id = ?
-        """,
+        """UPDATE payments
+           SET invoice_id = ?, matched = 1, match_score = ?, match_rule = ?, created_by = 'auto'
+           WHERE payment_id = ?""",
         (res["invoice_id"], res["score"], res["rule"], payment["payment_id"]),
     )
     conn.execute(
@@ -343,45 +247,37 @@ def _apply_single_invoice(conn, payment, res):
         (payment["payment_id"], res["invoice_id"], res["score"], res["rule"]),
     )
     conn.execute(
-        """
-        UPDATE invoices
-        SET paid_sum_eur = COALESCE(paid_sum_eur,0) + ?,
-            payment_count = COALESCE(payment_count,0) + 1,
-            last_payment_date = ?
-        WHERE invoice_id = ?
-        """,
+        """UPDATE invoices
+           SET paid_sum_eur = COALESCE(paid_sum_eur, 0) + ?,
+               payment_count = COALESCE(payment_count, 0) + 1,
+               last_payment_date = ?
+           WHERE invoice_id = ?""",
         (payment["amount_eur"], datetime.utcnow().isoformat(), res["invoice_id"]),
     )
 
 
 def apply_matching(auto_commit=True):
+    """Match all unmatched payments and update DB accordingly."""
     conn = load_db()
     rows = conn.execute(
         "SELECT * FROM payments WHERE COALESCE(matched, 0) = 0"
     ).fetchall()
+    print(f"Zu matchende Zahlungen: {len(rows)}")
 
     for p in rows:
         res = match_payment_row(conn, p)
-        if res.get("invoice_id"):
+
+        if res.get("invoice_id") and res.get("score", 0.0) >= AUTO_THRESHOLD:
             _apply_single_invoice(conn, p, res)
-        elif res.get("rule") == "split_collective":
+
+        elif res.get("rule") == "split_collective" and res.get("split"):
             for inv_id, alloc in res["split"]:
                 conn.execute(
-                    """
-                    INSERT INTO payments(
-                      invoice_id, source, booking_date, value_date, amount_eur,
-                      reference_text, matched, match_score, match_rule, created_by
-                    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'auto_split', 'auto')
-                    """,
-                    (
-                        inv_id,
-                        p["source"],
-                        p["booking_date"],
-                        p["value_date"],
-                        alloc,
-                        p["reference_text"],
-                        0.8,
-                    ),
+                    """INSERT INTO payments(
+                         invoice_id, source, booking_date, value_date, amount_eur,
+                         reference_text, matched, match_score, match_rule, created_by
+                       ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'auto_split', 'auto')""",
+                    (inv_id, p["source"], p["booking_date"], p["value_date"], alloc, p["reference_text"], 0.8),
                 )
                 child_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
                 conn.execute(
@@ -389,17 +285,16 @@ def apply_matching(auto_commit=True):
                     (child_id, inv_id, 0.8, "auto_split"),
                 )
                 conn.execute(
-                    """
-                    UPDATE invoices
-                    SET paid_sum_eur = COALESCE(paid_sum_eur,0) + ?,
-                        payment_count = COALESCE(payment_count,0) + 1,
-                        last_payment_date = ?
-                    WHERE invoice_id = ?
-                    """,
+                    """UPDATE invoices
+                       SET paid_sum_eur = COALESCE(paid_sum_eur, 0) + ?,
+                           payment_count = COALESCE(payment_count, 0) + 1,
+                           last_payment_date = ?
+                       WHERE invoice_id = ?""",
                     (alloc, datetime.utcnow().isoformat(), inv_id),
                 )
+            # Mark original payment as processed
             conn.execute(
-                "UPDATE payments SET matched = 1, match_rule = 'split_parent', created_by='auto' WHERE payment_id = ?",
+                "UPDATE payments SET matched = 1, match_rule = 'split_parent', created_by = 'auto' WHERE payment_id = ?",
                 (p["payment_id"],),
             )
             conn.execute(
@@ -408,20 +303,17 @@ def apply_matching(auto_commit=True):
             )
 
         else:
+            # Audit log for unmatched / below-threshold
             conn.execute(
                 "INSERT INTO audit_log(payment_id, invoice_id, match_score, rule_used, automated, user) VALUES (?,?,?,?,1,'system')",
                 (p["payment_id"], res.get("invoice_id"), res.get("score", 0.0), res.get("rule")),
             )
+            # Store suggestion if above review threshold
             if res.get("invoice_id") and res.get("score", 0.0) >= REVIEW_THRESHOLD:
                 conn.execute(
-                    "UPDATE payments SET match_score=?, match_rule=? WHERE payment_id=?",
+                    "UPDATE payments SET match_score = ?, match_rule = ? WHERE payment_id = ?",
                     (res["score"], res["rule"], p["payment_id"]),
                 )
-        else:
-            conn.execute(
-                "INSERT INTO audit_log(payment_id, invoice_id, match_score, rule_used, automated, user) VALUES (?,?,?,?,1,'system')",
-                (p["payment_id"], None, 0.0, res["rule"]),
-            )
 
     if auto_commit:
         conn.commit()

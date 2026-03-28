@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}CSV Import — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<h1>📤 Daten importieren</h1>
+<p class="page-desc">Wählen Sie den Dateityp und laden Sie Ihre CSV-Datei hoch.</p>
+
+<div class="upload-grid">
+    <!-- Rechnungen -->
+    <div class="upload-card">
+        <div class="upload-icon">📄</div>
+        <h2>Rechnungen</h2>
+        <p>CSV mit neuen Rechnungen importieren</p>
+        <form method="POST" action="{{ url_for('upload_rechnungen') }}" enctype="multipart/form-data" class="upload-form" id="form-rechnungen">
+            <label for="file-rechnungen" class="upload-dropzone" id="dropzone-rechnungen">
+                <span class="dropzone-text">📁 Datei auswählen oder hierher ziehen</span>
+                <span class="dropzone-filename" id="filename-rechnungen"></span>
+                <input type="file" name="file" id="file-rechnungen" accept=".csv,.CSV" class="file-input">
+            </label>
+            <button type="submit" class="btn btn-primary btn-large upload-btn" disabled id="btn-rechnungen">
+                Rechnungen importieren
+            </button>
+        </form>
+    </div>
+
+    <!-- Sparkasse -->
+    <div class="upload-card">
+        <div class="upload-icon">🏦</div>
+        <h2>Sparkasse</h2>
+        <p>Kontoauszug der Sparkasse importieren</p>
+        <form method="POST" action="{{ url_for('upload_bank', bank='sparkasse') }}" enctype="multipart/form-data" class="upload-form" id="form-sparkasse">
+            <label for="file-sparkasse" class="upload-dropzone" id="dropzone-sparkasse">
+                <span class="dropzone-text">📁 Datei auswählen oder hierher ziehen</span>
+                <span class="dropzone-filename" id="filename-sparkasse"></span>
+                <input type="file" name="file" id="file-sparkasse" accept=".csv,.CSV" class="file-input">
+            </label>
+            <button type="submit" class="btn btn-primary btn-large upload-btn" disabled id="btn-sparkasse">
+                Sparkasse importieren
+            </button>
+        </form>
+    </div>
+
+    <!-- VoBa Kraichgau -->
+    <div class="upload-card">
+        <div class="upload-icon">🏦</div>
+        <h2>VoBa Kraichgau</h2>
+        <p>Kontoauszug VoBa Kraichgau importieren</p>
+        <form method="POST" action="{{ url_for('upload_bank', bank='voba_kraichgau') }}" enctype="multipart/form-data" class="upload-form" id="form-voba_kraichgau">
+            <label for="file-voba_kraichgau" class="upload-dropzone" id="dropzone-voba_kraichgau">
+                <span class="dropzone-text">📁 Datei auswählen oder hierher ziehen</span>
+                <span class="dropzone-filename" id="filename-voba_kraichgau"></span>
+                <input type="file" name="file" id="file-voba_kraichgau" accept=".csv,.CSV" class="file-input">
+            </label>
+            <button type="submit" class="btn btn-primary btn-large upload-btn" disabled id="btn-voba_kraichgau">
+                VoBa Kraichgau importieren
+            </button>
+        </form>
+    </div>
+
+    <!-- VoBa Pur -->
+    <div class="upload-card">
+        <div class="upload-icon">🏦</div>
+        <h2>VoBa Pur</h2>
+        <p>Kontoauszug VoBa Pur importieren</p>
+        <form method="POST" action="{{ url_for('upload_bank', bank='voba_pur') }}" enctype="multipart/form-data" class="upload-form" id="form-voba_pur">
+            <label for="file-voba_pur" class="upload-dropzone" id="dropzone-voba_pur">
+                <span class="dropzone-text">📁 Datei auswählen oder hierher ziehen</span>
+                <span class="dropzone-filename" id="filename-voba_pur"></span>
+                <input type="file" name="file" id="file-voba_pur" accept=".csv,.CSV" class="file-input">
+            </label>
+            <button type="submit" class="btn btn-primary btn-large upload-btn" disabled id="btn-voba_pur">
+                VoBa Pur importieren
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

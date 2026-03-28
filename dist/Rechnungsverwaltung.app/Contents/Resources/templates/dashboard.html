@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Übersicht — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<h1>Übersicht</h1>
+
+<div class="stats-grid">
+    <div class="stat-card stat-open">
+        <div class="stat-number">{{ stats.open_invoices }}</div>
+        <div class="stat-label">Offene Rechnungen</div>
+    </div>
+    <div class="stat-card stat-partial">
+        <div class="stat-number">{{ stats.partial_invoices }}</div>
+        <div class="stat-label">Teiloffen</div>
+    </div>
+    <div class="stat-card stat-paid">
+        <div class="stat-number">{{ stats.paid_invoices }}</div>
+        <div class="stat-label">Bezahlt</div>
+    </div>
+    <div class="stat-card stat-over">
+        <div class="stat-number">{{ stats.overpaid_invoices }}</div>
+        <div class="stat-label">Überzahlung</div>
+    </div>
+</div>
+
+<div class="stats-grid stats-grid-secondary">
+    <div class="stat-card stat-neutral">
+        <div class="stat-number">{{ stats.open_sum | format_eur }}</div>
+        <div class="stat-label">Offener Betrag gesamt</div>
+    </div>
+    <div class="stat-card stat-neutral">
+        <div class="stat-number">{{ stats.unmatched_payments }}</div>
+        <div class="stat-label">Nicht zugeordnete Zahlungen</div>
+    </div>
+    <div class="stat-card stat-warn">
+        <div class="stat-number">{{ stats.mahnung_1 + stats.mahnung_2 }}</div>
+        <div class="stat-label">Mahnungen ({{ stats.mahnung_1 }}× erste, {{ stats.mahnung_2 }}× zweite)</div>
+    </div>
+    <div class="stat-card stat-neutral">
+        <div class="stat-number">{{ stats.total_invoices }}</div>
+        <div class="stat-label">Rechnungen gesamt</div>
+    </div>
+</div>
+
+<h2>Aktionen</h2>
+<div class="action-buttons">
+    <form method="POST" action="{{ url_for('run_matching_action') }}" class="action-form">
+        <button type="submit" class="btn btn-primary btn-large" onclick="return confirm('Matching jetzt ausführen?')">
+            🔄 Matching starten
+        </button>
+        <p class="action-desc">Zahlungen automatisch den Rechnungen zuordnen</p>
+    </form>
+    <form method="POST" action="{{ url_for('run_status_action') }}" class="action-form">
+        <button type="submit" class="btn btn-secondary btn-large" onclick="return confirm('Status aller Rechnungen aktualisieren?')">
+            📊 Status aktualisieren
+        </button>
+        <p class="action-desc">Offen / Bezahlt / Teiloffen neu berechnen</p>
+    </form>
+    <form method="POST" action="{{ url_for('run_mahnung_action') }}" class="action-form">
+        <button type="submit" class="btn btn-warning btn-large" onclick="return confirm('Mahnlauf jetzt ausführen?')">
+            ⚠️ Mahnlauf starten
+        </button>
+        <p class="action-desc">1. und 2. Mahnung prüfen</p>
+    </form>
+</div>
+
+{% if recent_audit %}
+<h2>Letzte Aktivitäten</h2>
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Nr.</th>
+            <th>Zahlung</th>
+            <th>Rechnung</th>
+            <th>Score</th>
+            <th>Regel</th>
+            <th>Zeitpunkt</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for log in recent_audit %}
+        <tr>
+            <td>{{ log.audit_id }}</td>
+            <td>{{ log.payment_id or "—" }}</td>
+            <td>
+                {% if log.invoice_id %}
+                <a href="{{ url_for('rechnung_detail', invoice_id=log.invoice_id) }}">{{ log.invoice_id }}</a>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+            <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
+            <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
+            <td>{{ log.ts | format_date }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

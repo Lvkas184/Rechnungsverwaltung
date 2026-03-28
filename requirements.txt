@@ -1,5 +1,7 @@
+flask>=3.0.0
+rapidfuzz>=1.9.1
+pytest>=7.0.0
 google-api-python-client>=2.0.0
 google-auth>=2.0.0
 google-auth-httplib2>=0.1.0
-rapidfuzz>=1.9.1
-pytest>=7.0.0
+pywebview>=4.0.0

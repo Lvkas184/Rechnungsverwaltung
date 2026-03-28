@@ -1,0 +1,9 @@
+{
+  "Toleranz": 0.001,
+  "due_days_1": 30,
+  "due_days_2": 60,
+  "split_threshold": 0.01,
+  "match_score_auto": 0.85,
+  "match_score_review": 0.6,
+  "date_origin": "1899-12-30"
+}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Rechnungen — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<h1>📄 Rechnungen <span class="count-badge">{{ total }}</span></h1>
+
+<div class="filter-bar">
+    <form method="GET" action="{{ url_for('rechnungen') }}" class="filter-form">
+        <input type="text" name="q" placeholder="🔍 Suche (Nr. oder Name)…" value="{{ search }}" class="search-input">
+        <select name="status" class="filter-select" onchange="this.form.submit()">
+            <option value="">Alle Status</option>
+            <option value="Offen" {{ 'selected' if status_filter == 'Offen' }}>🔴 Offen</option>
+            <option value="Bezahlt" {{ 'selected' if status_filter == 'Bezahlt' }}>🟢 Bezahlt</option>
+            <option value="Teiloffen/Unterzahlung" {{ 'selected' if status_filter == 'Teiloffen/Unterzahlung' }}>🟡 Teiloffen</option>
+            <option value="Überzahlung" {{ 'selected' if status_filter == 'Überzahlung' }}>🔵 Überzahlung</option>
+        </select>
+        <button type="submit" class="btn btn-secondary">Suchen</button>
+    </form>
+</div>
+
+{% if invoices %}
+<div class="table-responsive">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Rechnungs-Nr.</th>
+            <th>Name</th>
+            <th>Betrag (Brutto)</th>
+            <th>Bezahlt</th>
+            <th>Abweichung</th>
+            <th>Status</th>
+            <th>Mahnung</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for inv in invoices %}
+        <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}'">
+            <td class="cell-id">{{ inv.invoice_id }}</td>
+            <td>{{ inv.name or "—" }}</td>
+            <td class="cell-amount">{{ inv.amount_gross | format_eur }}</td>
+            <td class="cell-amount">{{ inv.paid_sum_eur | format_eur }}</td>
+            <td class="cell-amount">{{ inv.deviation_eur | format_eur }}</td>
+            <td>
+                <span class="status-badge status-{{ inv.status | lower | replace('/', '-') | replace(' ', '-') if inv.status else 'offen' }}">
+                    {{ inv.status or "Offen" }}
+                </span>
+            </td>
+            <td>
+                {% if inv.reminder_status %}
+                <span class="mahnung-badge">{{ inv.reminder_status }}</span>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('rechnungen', page=page-1, status=status_filter, q=search) }}" class="btn btn-secondary">← Zurück</a>
+    {% endif %}
+    <span class="page-info">Seite {{ page }} von {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="{{ url_for('rechnungen', page=page+1, status=status_filter, q=search) }}" class="btn btn-secondary">Weiter →</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <p>Keine Rechnungen gefunden.</p>
+    <a href="{{ url_for('upload') }}" class="btn btn-primary">📤 Rechnungen importieren</a>
+</div>
+{% endif %}
+{% endblock %}
