@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<ul class="breadcrumbs">
+    <li><a href="{{ url_for('upload') }}">Import</a></li>
+    <li>Migration (Legacy Kontoauszüge)</li>
+</ul>
+
+<div class="card">
+    <h2>Einmaliger Daten-Import (Alt-Daten)</h2>
+    <p>Hier kannst du historische Kontoauszüge (aus der alten Excel-Struktur) hochladen. Das System importiert die Daten so, dass bereits zugeordnete Rechnungen (`ReNr_effektiv`) automatisch berücksichtigt werden.</p>
+    
+    <div class="info-box">
+        <strong>Vorausgesetzte Spalten (Groß-/Kleinschreibung egal):</strong>
+        <ul>
+            <li>Buchungsdatum</li>
+            <li>Betrag_eur</li>
+            <li>Verwendungszweck</li>
+            <li>Rechnung Name <em>(oder: Name)</em></li>
+            <li>Bank</li>
+            <li>ReNr_effektiv <em>(wird als zugeordnete Rechnungsnummer gewertet, wenn ausgefüllt)</em></li>
+        </ul>
+    </div>
+
+    <form action="{{ url_for('migration_upload') }}" method="POST" enctype="multipart/form-data" style="margin-top: 30px;">
+        <label for="legacy_csv" style="display: block; margin-bottom: 10px; font-weight: bold;">
+            Alt-Daten CSV (Sparkasse/VoBa):
+        </label>
+        <div class="upload-area" onclick="document.getElementById('legacy_csv').click()">
+            <span style="font-size: 40px; display: block; margin-bottom: 10px;">📊</span>
+            <strong>CSV-Datei hier ablegen oder anklicken</strong>
+        </div>
+        <input type="file" id="legacy_csv" name="file" accept=".csv" style="display: none;" onchange="this.form.submit()">
+    </form>
+    <div class="card" style="margin-top: 20px;">
+        <h2>Alt-Daten: Rechnungen</h2>
+        <p>Lade hier die alte Liste deiner Rechnungen hoch.</p>
+        
+        <div class="info-box">
+            <strong>Vorausgesetzte Spalten:</strong>
+            <ul>
+                <li>Rechnungsnummer</li>
+                <li>Betrag_Brutto</li>
+                <li>Name</li>
+                <li>Art <em>(falls "Gutschrift", wird der Betrag abgezogen)</em></li>
+            </ul>
+        </div>
+
+        <form action="{{ url_for('migration_upload_invoices') }}" method="POST" enctype="multipart/form-data" style="margin-top: 20px;">
+            <label for="legacy_inv_csv" style="display: block; margin-bottom: 10px; font-weight: bold;">
+                Alt-Daten Rechnungen (CSV):
+            </label>
+            <div class="upload-area" onclick="document.getElementById('legacy_inv_csv').click()">
+                <span style="font-size: 40px; display: block; margin-bottom: 10px;">📄</span>
+                <strong>Rechnungs-CSV hier ablegen</strong>
+            </div>
+            <input type="file" id="legacy_inv_csv" name="file" accept=".csv" style="display: none;" onchange="this.form.submit()">
+        </form>
+    </div>
+</div>
+{% endblock %}

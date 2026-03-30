@@ -38,21 +38,39 @@ def update_all():
     """Recompute status and deviation_eur for every invoice in the DB."""
     params = load_params()
     tolerance = float(params.get("Toleranz", 0.001))
-    conn = sqlite3.connect(DB)
-    conn.row_factory = sqlite3.Row
+    
+    from src.db import get_db
+    conn = get_db()
+    
+    # Ensure paid_sum_eur is accurately computed from all currently matched payments
+    conn.execute("""
+        UPDATE invoices
+        SET paid_sum_eur = (
+            SELECT COALESCE(SUM(amount_eur), 0)
+            FROM payments
+            WHERE payments.invoice_id = invoices.invoice_id
+              AND payments.matched = 1
+        )
+    """)
+    conn.commit()
 
+    conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT * FROM invoices").fetchall()
+    
+    updated = 0
     for inv in rows:
         status, dev = compute_status_row(inv, tolerance)
         conn.execute(
             "UPDATE invoices SET status = ?, deviation_eur = ? WHERE invoice_id = ?",
             (status, dev, inv["invoice_id"]),
         )
+        updated += 1
 
     conn.commit()
     conn.close()
+    return f"Status von {updated} Rechnungen aktualisiert.", True
 
 
 if __name__ == "__main__":
-    update_all()
-    print("Status aktualisiert.")
+    msg, _ = update_all()
+    print(msg)

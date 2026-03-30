@@ -45,7 +45,7 @@
     </main>
 
     <footer class="main-footer">
-        <p>Rechnungsverwaltung &copy; {{ now().year if now is defined else "2026" }}</p>
+        <p>Rechnungsverwaltung &copy; 2026 | <a href="{{ url_for('migration') }}" style="color: #ccc; text-decoration: none; font-size: 0.9em;">Alt-Daten Import</a></p>
     </footer>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>

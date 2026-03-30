@@ -80,7 +80,7 @@
     </thead>
     <tbody>
         {% for p in payments %}
-        <tr>
+        <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=p.payment_id) }}'">
             <td>{{ p.payment_id }}</td>
             <td><span class="badge">{{ p.source or "—" }}</span></td>
             <td>{{ p.booking_date | format_date }}</td>
@@ -116,7 +116,13 @@
         {% for log in audit %}
         <tr>
             <td>{{ log.audit_id }}</td>
-            <td>{{ log.payment_id or "—" }}</td>
+            <td>
+                {% if log.payment_id %}
+                <a href="{{ url_for('zahlung_detail', payment_id=log.payment_id) }}">{{ log.payment_id }}</a>
+                {% else %}
+                —
+                {% endif %}
+            </td>
             <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
             <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
             <td>{{ log.ts | format_date }}</td>

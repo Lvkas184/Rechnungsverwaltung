@@ -101,7 +101,16 @@ def rechnungen():
     status_filter = request.args.get("status", "")
     search = request.args.get("q", "").strip()
     page = max(1, int(request.args.get("page", 1)))
+    sort_col = request.args.get("sort", "invoice_id")
+    order = request.args.get("order", "desc").lower()
     per_page = 50
+
+    # Validate sorting
+    valid_cols = ["invoice_id", "name", "amount_gross", "paid_sum_eur", "deviation_eur", "status", "reminder_status"]
+    if sort_col not in valid_cols:
+        sort_col = "invoice_id"
+    if order not in ["asc", "desc"]:
+        order = "desc"
 
     query = "SELECT * FROM invoices WHERE 1=1"
     params = []
@@ -111,7 +120,7 @@ def rechnungen():
     if search:
         query += " AND (CAST(invoice_id AS TEXT) LIKE ? OR name LIKE ?)"
         params.extend([f"%{search}%", f"%{search}%"])
-    query += " ORDER BY invoice_id DESC LIMIT ? OFFSET ?"
+    query += f" ORDER BY {sort_col} {order.upper()} LIMIT ? OFFSET ?"
     params.extend([per_page, (page - 1) * per_page])
 
     invoices = conn.execute(query, params).fetchall()
@@ -131,7 +140,8 @@ def rechnungen():
     total_pages = max(1, (total + per_page - 1) // per_page)
     return render_template("rechnungen.html", invoices=invoices, page=page,
                            total_pages=total_pages, total=total,
-                           status_filter=status_filter, search=search)
+                           status_filter=status_filter, search=search,
+                           sort_col=sort_col, order=order)
 
 
 @app.route("/rechnungen/<int:invoice_id>")
@@ -162,7 +172,15 @@ def zahlungen():
     filter_type = request.args.get("filter", "")
     search = request.args.get("q", "").strip()
     page = max(1, int(request.args.get("page", 1)))
+    sort_col = request.args.get("sort", "payment_id")
+    order = request.args.get("order", "desc").lower()
     per_page = 50
+
+    valid_cols = ["payment_id", "source", "booking_date", "amount_eur", "beneficiary_name", "reference_text", "match_score", "invoice_id", "matched"]
+    if sort_col not in valid_cols:
+        sort_col = "payment_id"
+    if order not in ["asc", "desc"]:
+        order = "desc"
 
     query = "SELECT * FROM payments WHERE 1=1"
     params = []
@@ -175,7 +193,7 @@ def zahlungen():
     if search:
         query += " AND (reference_text LIKE ? OR beneficiary_name LIKE ? OR CAST(invoice_id AS TEXT) LIKE ?)"
         params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
-    query += " ORDER BY payment_id DESC LIMIT ? OFFSET ?"
+    query += f" ORDER BY {sort_col} {order.upper()} LIMIT ? OFFSET ?"
     params.extend([per_page, (page - 1) * per_page])
 
     payments = conn.execute(query, params).fetchall()
@@ -197,7 +215,30 @@ def zahlungen():
     total_pages = max(1, (total + per_page - 1) // per_page)
     return render_template("zahlungen.html", payments=payments, page=page,
                            total_pages=total_pages, total=total,
-                           filter_type=filter_type, search=search)
+                           filter_type=filter_type, search=search,
+                           sort_col=sort_col, order=order)
+
+
+@app.route("/zahlungen/<int:payment_id>")
+def zahlung_detail(payment_id):
+    conn = get_db()
+    pay = conn.execute("SELECT * FROM payments WHERE payment_id = ?", (payment_id,)).fetchone()
+    if not pay:
+        conn.close()
+        flash("Zahlung nicht gefunden.", "error")
+        return redirect(url_for("zahlungen"))
+    
+    # If matched, fetch the corresponding invoice details
+    inv = None
+    if pay["invoice_id"]:
+        inv = conn.execute("SELECT * FROM invoices WHERE invoice_id = ?", (pay["invoice_id"],)).fetchone()
+
+    audit = conn.execute(
+        "SELECT * FROM audit_log WHERE payment_id = ? ORDER BY audit_id DESC", (payment_id,)
+    ).fetchall()
+    conn.close()
+    return render_template("zahlung_detail.html", pay=pay, inv=inv, audit=audit)
+
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +288,89 @@ def upload_bank(bank):
         bank_name = {"sparkasse": "Sparkasse", "voba_kraichgau": "VoBa Kraichgau", "voba_pur": "VoBa Pur"}[bank]
         flash(f"✅ {result['imported']} Buchungen ({bank_name}) importiert, {result['skipped']} übersprungen.", "success")
     return redirect(url_for("upload"))
+
+
+@app.route("/migration", methods=["GET"])
+def migration():
+    """Versteckte Seite für den einmaligen Alt-Daten-Import."""
+    return render_template("migration.html")
+
+
+@app.route("/migration/upload", methods=["POST"])
+def migration_upload():
+    if "file" not in request.files:
+        flash("Keine Datei ausgewählt.", "error")
+        return redirect(url_for("migration"))
+
+    file = request.files["file"]
+    if file.filename == "":
+        flash("Keine Datei ausgewählt.", "error")
+        return redirect(url_for("migration"))
+
+    content = file.read()
+    if not content:
+        flash("Die Datei ist leer.", "error")
+        return redirect(url_for("migration"))
+
+    from src.csv_import import import_legacy_csv
+
+    try:
+        res = import_legacy_csv(content)
+        if res.get("error"):
+            flash(f"Fehler beim Import: {res['error']}", "error")
+        else:
+            flash(f"Alt-Daten-Import erfolgreich: {res['imported']} Zahlungen importiert, {res['skipped']} übersprungen.", "success")
+            
+            # WICHTIG: Die Rechnungsstati neu berechnen!
+            try:
+                msg, ok = update_all()
+                if ok:
+                    flash(f"Status-Update: {msg}", "success")
+            except Exception as e:
+                pass
+                
+    except Exception as e:
+        flash(f"Unerwarteter Fehler: {str(e)}", "error")
+
+    return redirect(url_for("migration"))
+
+
+@app.route("/migration/upload_invoices", methods=["POST"])
+def migration_upload_invoices():
+    if "file" not in request.files:
+        flash("Keine Datei ausgewählt.", "error")
+        return redirect(url_for("migration"))
+
+    file = request.files["file"]
+    if file.filename == "":
+        flash("Keine Datei ausgewählt.", "error")
+        return redirect(url_for("migration"))
+
+    content = file.read()
+    if not content:
+        flash("Die Datei ist leer.", "error")
+        return redirect(url_for("migration"))
+
+    try:
+        from src.csv_import import import_legacy_invoices_csv
+        res = import_legacy_invoices_csv(content)
+        if res.get("error"):
+            flash(f"Fehler beim Import: {res['error']}", "error")
+        else:
+            flash(f"Rechnungs-Import erfolgreich: {res['imported']} Rechnungen importiert, {res['skipped']} übersprungen.", "success")
+            
+            # WICHTIG: Die Rechnungsstati neu berechnen!
+            try:
+                msg, ok = update_all()
+                if ok:
+                    flash(f"Status-Update: {msg}", "success")
+            except Exception as e:
+                pass
+                
+    except Exception as e:
+        flash(f"Unerwarteter Fehler: {str(e)}", "error")
+
+    return redirect(url_for("migration"))
 
 
 @app.route("/shutdown", methods=["POST"])

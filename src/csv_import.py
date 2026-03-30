@@ -10,6 +10,8 @@ Für CAMT.053 (XML) kann später ein weiterer Parser ergänzt werden.
 import csv
 import io
 import re
+import encodings.utf_8_sig  # Force PyInstaller to bundle this encoding
+import encodings.cp1252     # Force PyInstaller to bundle cp1252
 from datetime import datetime, timedelta
 
 from src.db import get_db
@@ -290,3 +292,182 @@ def import_voba_kraichgau_csv(file_content, db_path=None):
 
 def import_voba_pur_csv(file_content, db_path=None):
     return import_bank_csv(file_content, "VoBa Pur", db_path)
+
+
+# ---------------------------------------------------------------------------
+# Legacy Excel/CSV Import (One-time Migration)
+# ---------------------------------------------------------------------------
+
+def import_legacy_csv(file_content, db_path=None):
+    """Import an already processed Excel/CSV sheet from the legacy pipeline.
+    
+    Expected columns:
+    Buchungsdatum, Valutadatum, Betrag_eur, Verwendungszweck, Rechnung Name (or Name),
+    Bank, Name_RAB, Rechnungsnummer manuell, ReNr_effektiv
+    
+    If 'ReNr_effektiv' is filled, the payment is inserted as already matched.
+    """
+    header, data = _read_csv(file_content)
+    if not header or not data:
+        return {"imported": 0, "skipped": 0, "error": "Leere CSV-Datei"}
+
+    header_clean = [h.strip() for h in header]
+    col_map = {h.lower(): i for i, h in enumerate(header_clean)}
+
+    def find_col(*names):
+        for n in names:
+            if n.lower() in col_map:
+                return col_map[n.lower()]
+        return None
+
+    idx_buchung = find_col("buchungsdatum")
+    idx_valuta = find_col("valutadatum")
+    idx_amount = find_col("betrag_eur", "betrag in eur", "amount")
+    idx_ref = find_col("verwendungszweck")
+    idx_name = find_col("rechnung name", "name", "empfängername")
+    idx_bank = find_col("bank", "source")
+    idx_effektiv = find_col("renr_effektiv", "rechnungsnummer effektiv")
+
+    if idx_amount is None or idx_buchung is None:
+        return {"imported": 0, "skipped": 0,
+                "error": f"Pflichtspalten (Buchungsdatum, Betrag_eur) nicht gefunden. Vorhandene: {', '.join(header_clean)}"}
+
+    conn = get_db(db_path)
+    imported = 0
+    skipped = 0
+
+    for row in data:
+        if not row or all(c.strip() == "" for c in row):
+            continue
+
+        def val(idx):
+            if idx is None or idx >= len(row):
+                return None
+            return row[idx].strip() if row[idx] else None
+
+        amount = _parse_amount(val(idx_amount))
+        if amount is None:
+            skipped += 1
+            continue
+
+        booking_date = _parse_date(val(idx_buchung))
+        valuta_date = _parse_date(val(idx_valuta))
+        name = val(idx_name)
+        reference = val(idx_ref)
+        bank = val(idx_bank) or "Legacy"
+        
+        # Determine if it's already matched
+        raw_renr = val(idx_effektiv)
+        matched_invoice_id = None
+        is_matched = 0
+        match_score = None
+        match_rule = None
+        
+        if raw_renr:
+            try:
+                # Same cleanup logic as when importing DATEV Invoices
+                clean_renr = int(float(str(raw_renr).replace(",", ".")))
+                
+                # Pruefen ob die Rechnung existiert, um Foreign-Key Fehler zu vermeiden
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM invoices WHERE invoice_id = ?", (clean_renr,))
+                if cursor.fetchone():
+                    matched_invoice_id = clean_renr
+                    is_matched = 1
+                    match_score = 1.0
+                    match_rule = "Legacy Import"
+            except (ValueError, TypeError):
+                # Cannot parse invoice ID cleanly, leave unmatched
+                pass
+
+        conn.execute(
+            """INSERT INTO payments(invoice_id, source, booking_date, value_date,
+                 amount_eur, reference_text, iban, beneficiary_name, matched, match_score, match_rule)
+               VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)""",
+            (matched_invoice_id, bank, booking_date, valuta_date, amount, reference, name, is_matched, match_score, match_rule),
+        )
+        imported += 1
+
+    conn.commit()
+    conn.close()
+    return {"imported": imported, "skipped": skipped, "error": None}
+
+
+def import_legacy_invoices_csv(file_content, db_path=None):
+    """Import an already processed Invoice Excel/CSV sheet from the legacy pipeline.
+    
+    Expected columns:
+    Rechnungsnummer, Betrag_Brutto, Name, Status, Art
+    
+    If Art is 'Gutschrift', the amount is treated as negative.
+    """
+    header, data = _read_csv(file_content)
+    if not header or not data:
+        return {"imported": 0, "skipped": 0, "error": "Leere CSV-Datei"}
+
+    header_clean = [h.strip() for h in header]
+    col_map = {h.lower(): i for i, h in enumerate(header_clean)}
+
+    def find_col(*names):
+        for n in names:
+            if n.lower() in col_map:
+                return col_map[n.lower()]
+        return None
+
+    idx_invnr = find_col("rechnungsnummer", "renr", "rechnungsnr")
+    idx_amount = find_col("betrag_brutto", "betrag", "summe")
+    idx_name = find_col("name", "kunde")
+    idx_art = find_col("art", "belegart")
+
+    if idx_invnr is None or idx_amount is None:
+        return {"imported": 0, "skipped": 0,
+                "error": f"Pflichtspalten (Rechnungsnummer, Betrag_Brutto) nicht gefunden. Vorhandene: {', '.join(header_clean)}"}
+
+    conn = get_db(db_path)
+    imported = 0
+    skipped = 0
+
+    for row in data:
+        if not row or all(c.strip() == "" for c in row):
+            continue
+
+        def val(idx):
+            if idx is None or idx >= len(row):
+                return None
+            return row[idx].strip() if row[idx] else None
+
+        inv_nr = val(idx_invnr)
+        if not inv_nr:
+            skipped += 1
+            continue
+
+        try:
+            inv_nr = int(float(str(inv_nr).replace(",", ".")))
+        except (ValueError, TypeError):
+            try:
+                inv_nr = int(re.sub(r"[^\d]", "", str(inv_nr)))
+            except (ValueError, TypeError):
+                skipped += 1
+                continue
+
+        amount = _parse_amount(val(idx_amount))
+        art = val(idx_art)
+        
+        if art and "gutschrift" in str(art).lower() and amount and amount > 0:
+            amount = -amount
+
+        name = val(idx_name)
+
+        conn.execute(
+            """INSERT OR REPLACE INTO invoices(invoice_id, name, amount_gross, 
+                   status, paid_sum_eur, payment_count)
+               VALUES (?, ?, ?, COALESCE((SELECT status FROM invoices WHERE invoice_id = ?), 'Offen'),
+                       COALESCE((SELECT paid_sum_eur FROM invoices WHERE invoice_id = ?), 0),
+                       COALESCE((SELECT payment_count FROM invoices WHERE invoice_id = ?), 0))""",
+            (inv_nr, name, abs(amount) if amount else None, inv_nr, inv_nr, inv_nr),
+        )
+        imported += 1
+
+    conn.commit()
+    conn.close()
+    return {"imported": imported, "skipped": skipped, "error": None}

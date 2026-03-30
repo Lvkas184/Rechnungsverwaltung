@@ -20,20 +20,27 @@
 <div class="table-responsive">
 <table class="data-table">
     <thead>
+        {% macro sort_link(col_id, label) %}
+            {% set new_order = 'asc' if sort_col != col_id or order == 'desc' else 'desc' %}
+            {% set arrow = ' ↑' if sort_col == col_id and order == 'asc' else (' ↓' if sort_col == col_id and order == 'desc' else '') %}
+            <a href="{{ url_for('zahlungen', page=page, filter=filter_type, q=search, sort=col_id, order=new_order) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between;">
+                {{ label }}<span style="font-size: 0.8em; color: #888;">{{ arrow }}</span>
+            </a>
+        {% endmacro %}
         <tr>
-            <th>ID</th>
-            <th>Quelle</th>
-            <th>Buchungsdatum</th>
-            <th>Betrag</th>
-            <th>Absender</th>
-            <th>Verwendungszweck</th>
-            <th>Rechnung</th>
-            <th>Status</th>
+            <th>{{ sort_link('payment_id', 'ID') }}</th>
+            <th>{{ sort_link('source', 'Quelle') }}</th>
+            <th>{{ sort_link('booking_date', 'Buchungsdatum') }}</th>
+            <th>{{ sort_link('amount_eur', 'Betrag') }}</th>
+            <th>{{ sort_link('beneficiary_name', 'Absender') }}</th>
+            <th>{{ sort_link('reference_text', 'Verwendungszweck') }}</th>
+            <th>{{ sort_link('invoice_id', 'Rechnung') }}</th>
+            <th>{{ sort_link('matched', 'Status') }}</th>
         </tr>
     </thead>
     <tbody>
         {% for p in payments %}
-        <tr>
+        <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=p.payment_id) }}'">
             <td>{{ p.payment_id }}</td>
             <td><span class="badge">{{ p.source or "—" }}</span></td>
             <td>{{ p.booking_date | format_date }}</td>
@@ -61,14 +68,29 @@
 </div>
 
 {% if total_pages > 1 %}
-<div class="pagination">
+<div class="pagination" style="display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
+    <a href="{{ url_for('zahlungen', page=1, filter=filter_type, q=search, sort=sort_col, order=order) }}" class="btn btn-secondary" title="Erste Seite">« Erste</a>
+
     {% if page > 1 %}
-    <a href="{{ url_for('zahlungen', page=page-1, filter=filter_type, q=search) }}" class="btn btn-secondary">← Zurück</a>
+    <a href="{{ url_for('zahlungen', page=page-1, filter=filter_type, q=search, sort=sort_col, order=order) }}" class="btn btn-secondary">← Zurück</a>
     {% endif %}
-    <span class="page-info">Seite {{ page }} von {{ total_pages }}</span>
+
+    <form method="GET" action="{{ url_for('zahlungen') }}" style="display: inline-flex; align-items: center; gap: 5px; margin: 0 10px;">
+        <input type="hidden" name="q" value="{{ search }}">
+        <input type="hidden" name="filter" value="{{ filter_type }}">
+        <input type="hidden" name="sort" value="{{ sort_col }}">
+        <input type="hidden" name="order" value="{{ order }}">
+        <span class="page-info">Seite</span>
+        <input type="number" name="page" value="{{ page }}" min="1" max="{{ total_pages }}" style="width: 60px; text-align: center; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px;">
+        <span class="page-info">von {{ total_pages }}</span>
+        <button type="submit" class="btn btn-secondary" style="padding: 8px 12px;">Gehe zu</button>
+    </form>
+
     {% if page < total_pages %}
-    <a href="{{ url_for('zahlungen', page=page+1, filter=filter_type, q=search) }}" class="btn btn-secondary">Weiter →</a>
+    <a href="{{ url_for('zahlungen', page=page+1, filter=filter_type, q=search, sort=sort_col, order=order) }}" class="btn btn-secondary">Weiter →</a>
     {% endif %}
+
+    <a href="{{ url_for('zahlungen', page=total_pages, filter=filter_type, q=search, sort=sort_col, order=order) }}" class="btn btn-secondary" title="Letzte Seite">Letzte »</a>
 </div>
 {% endif %}
 

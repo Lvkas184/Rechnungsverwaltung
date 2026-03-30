@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Zahlung {{ pay.payment_id }} — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<div class="detail-header">
+    <a href="{{ url_for('zahlungen') }}" class="btn btn-secondary">← Zurück</a>
+    <h1>Zahlung #{{ pay.payment_id }}</h1>
+</div>
+
+<div class="detail-grid">
+    <div class="detail-card">
+        <h2>Zahlungsinformationen</h2>
+        <dl class="detail-list">
+            <dt>ID</dt>
+            <dd class="cell-id">{{ pay.payment_id }}</dd>
+
+            <dt>Quelle / Bank</dt>
+            <dd><span class="badge">{{ pay.source or "—" }}</span></dd>
+
+            <dt>Buchungsdatum</dt>
+            <dd>{{ pay.booking_date | format_date }}</dd>
+
+            <dt>Wertstellungsdatum</dt>
+            <dd>{{ pay.value_date | format_date if pay.value_date else "—" }}</dd>
+
+            <dt>Betrag</dt>
+            <dd class="cell-amount">{{ pay.amount_eur | format_eur }}</dd>
+
+            <dt>Absender / Name</dt>
+            <dd>{{ pay.beneficiary_name or "—" }}</dd>
+            
+            <dt>IBAN</dt>
+            <dd style="font-family: monospace;">{{ pay.iban or "—" }}</dd>
+        </dl>
+    </div>
+
+    <div class="detail-card">
+        <h2>Zuordnungsstatus</h2>
+        <dl class="detail-list">
+            <dt class="full-width-detail">Verwendungszweck</dt>
+            <dd class="full-width-detail">
+                <div id="ref-container" class="ref-container">{{ pay.reference_text or "—" }}</div>
+                {% if pay.reference_text and pay.reference_text|length > 100 %}
+                <div id="ref-toggle" class="ref-toggle" onclick="toggleRef()">▽ Alles anzeigen</div>
+                {% endif %}
+            </dd>
+
+            <script>
+                function toggleRef() {
+                    const container = document.getElementById('ref-container');
+                    const toggle = document.getElementById('ref-toggle');
+                    if (container.classList.contains('expanded')) {
+                        container.classList.remove('expanded');
+                        toggle.textContent = '▽ Alles anzeigen';
+                    } else {
+                        container.classList.add('expanded');
+                        toggle.textContent = '△ Einklappen';
+                    }
+                }
+            </script>
+            <br>
+            <dt>Status</dt>
+            <dd>
+                {% if pay.matched == 1 %}
+                <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
+                {% else %}
+                <span class="status-badge status-offen">Offen (Nicht zugeordnet)</span>
+                {% endif %}
+            </dd>
+
+            <dt>Zugeordnete Rechnung</dt>
+            <dd>
+                {% if pay.invoice_id %}
+                <a href="{{ url_for('rechnung_detail', invoice_id=pay.invoice_id) }}" class="btn btn-secondary" style="font-size: 14px; padding: 4px 8px;">
+                    📄 Rechnung #{{ pay.invoice_id }} ansehen
+                </a>
+                {% else %}
+                —
+                {% endif %}
+            </dd>
+
+            <dt>Match Score</dt>
+            <dd>{{ "%.0f%%"|format(pay.match_score * 100) if pay.match_score else "—" }}</dd>
+
+            <dt>Verwendete Regel</dt>
+            <dd><span class="badge">{{ pay.match_rule or "—" }}</span></dd>
+        </dl>
+    </div>
+</div>
+
+{% if inv %}
+<h2>Details zur verknüpften Rechnung</h2>
+<div class="table-responsive">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Rechnungs-Nr.</th>
+            <th>Name</th>
+            <th>Betrag (Brutto)</th>
+            <th>Status</th>
+            <th>Mahnung</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}'">
+            <td class="cell-id">{{ inv.invoice_id }}</td>
+            <td>{{ inv.name or "—" }}</td>
+            <td class="cell-amount">{{ inv.amount_gross | format_eur }}</td>
+            <td>
+                <span class="status-badge status-{{ inv.status | lower | replace('/', '-') | replace(' ', '-') if inv.status else 'offen' }}">
+                    {{ inv.status or "Offen" }}
+                </span>
+            </td>
+            <td>
+                {% if inv.reminder_status %}
+                <span class="mahnung-badge">{{ inv.reminder_status }}</span>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+        </tr>
+    </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if audit %}
+<h2>Audit-Log (Chronik)</h2>
+<div class="table-responsive">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Nr.</th>
+            <th>Zahlung</th>
+            <th>Score</th>
+            <th>Regel</th>
+            <th>Zeitpunkt</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for log in audit %}
+        <tr>
+            <td>{{ log.audit_id }}</td>
+            <td>{{ log.payment_id or "—" }}</td>
+            <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
+            <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
+            <td>{{ log.ts | format_date }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
