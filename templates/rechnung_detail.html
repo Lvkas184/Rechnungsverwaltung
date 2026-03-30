@@ -80,8 +80,9 @@
     </thead>
     <tbody>
         {% for p in payments %}
-        <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=p.payment_id) }}'">
-            <td>{{ p.payment_id }}</td>
+        {% set payment_link_id = p.parent_payment_id if p.parent_payment_id else p.payment_id %}
+        <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=payment_link_id) }}'">
+            <td>{{ payment_link_id }}</td>
             <td><span class="badge">{{ p.source or "—" }}</span></td>
             <td>{{ p.booking_date | format_date }}</td>
             <td class="cell-amount">{{ p.amount_eur | format_eur }}</td>

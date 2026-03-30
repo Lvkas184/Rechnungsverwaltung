@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE TABLE IF NOT EXISTS payments (
   payment_id INTEGER PRIMARY KEY AUTOINCREMENT,
   invoice_id INTEGER NULL,
+  parent_payment_id INTEGER NULL,
   source TEXT,
   booking_date TEXT,
   value_date TEXT,
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS payments (
   iban TEXT,
   beneficiary_name TEXT,
   matched INTEGER DEFAULT 0,
+  akonto INTEGER DEFAULT 0,
   match_score REAL,
   match_rule TEXT,
   created_by TEXT,

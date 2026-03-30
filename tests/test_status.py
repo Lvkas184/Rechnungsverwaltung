@@ -32,3 +32,12 @@ def test_teiloffen():
 def test_ueberzahlung():
     status, _ = compute_status_row({"paid_sum_eur": 110.0, "amount_gross": 100.0}, 0.001)
     assert status == "Überzahlung"
+
+
+def test_akonto_for_9xxxxx_invoice():
+    status, dev = compute_status_row(
+        {"invoice_id": 923399, "paid_sum_eur": 0.0, "amount_gross": 100.0},
+        0.001,
+    )
+    assert status == "Akonto"
+    assert dev == -100.0

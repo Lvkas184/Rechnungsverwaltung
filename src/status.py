@@ -1,6 +1,7 @@
 """Status-Berechnung für invoices.
 
 Statuses:
+- Akonto          (Abschlagsrechnung: Rechnungsnummer 9xxxxx)
 - Offen           (paid_sum == 0)
 - Bezahlt         (Abweichung innerhalb Toleranz)
 - Überzahlung     (paid_sum > amount_gross + Toleranz)
@@ -8,9 +9,9 @@ Statuses:
 """
 
 import json
-import sqlite3
 
 from src.db import PARAM_PATH
+from src.invoice_rules import is_akonto_invoice_id
 
 
 def load_params(path=PARAM_PATH):
@@ -20,10 +21,19 @@ def load_params(path=PARAM_PATH):
 
 def compute_status_row(inv, tolerance):
     """Compute status and deviation for a single invoice dict/Row."""
+    invoice_id = None
+    try:
+        invoice_id = inv["invoice_id"]
+    except (TypeError, KeyError):
+        if isinstance(inv, dict):
+            invoice_id = inv.get("invoice_id")
+
     paid = inv["paid_sum_eur"] or 0.0
     amount = inv["amount_gross"] or 0.0
     deviation = paid - amount
-    if paid == 0:
+    if is_akonto_invoice_id(invoice_id):
+        status = "Akonto"
+    elif paid == 0:
         status = "Offen"
     elif abs(deviation) <= tolerance:
         status = "Bezahlt"
@@ -42,7 +52,7 @@ def update_all():
     from src.db import get_db
     conn = get_db()
     
-    # Ensure paid_sum_eur is accurately computed from all currently matched payments
+    # Rebuild payment aggregates from matched payments.
     conn.execute("""
         UPDATE invoices
         SET paid_sum_eur = (
@@ -50,11 +60,22 @@ def update_all():
             FROM payments
             WHERE payments.invoice_id = invoices.invoice_id
               AND payments.matched = 1
+        ),
+            payment_count = (
+            SELECT COUNT(*)
+            FROM payments
+            WHERE payments.invoice_id = invoices.invoice_id
+              AND payments.matched = 1
+        ),
+            last_payment_date = (
+            SELECT MAX(COALESCE(value_date, booking_date, created_at))
+            FROM payments
+            WHERE payments.invoice_id = invoices.invoice_id
+              AND payments.matched = 1
         )
     """)
     conn.commit()
 
-    conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT * FROM invoices").fetchall()
     
     updated = 0

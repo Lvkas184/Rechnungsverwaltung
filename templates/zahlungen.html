@@ -10,6 +10,7 @@
         
         <select name="show" class="filter-select" onchange="this.form.submit()">
             <option value="income" {{ 'selected' if show_type == 'income' }}>💰 Nur Einnahmen (> 0€)</option>
+            <option value="akonto" {{ 'selected' if show_type == 'akonto' }}>🧾 Abschlagsrechnungen (Akonto)</option>
             <option value="all" {{ 'selected' if show_type == 'all' }}>📂 Alle Zahlungen</option>
         </select>
 
@@ -67,6 +68,8 @@
             <td>
                 {% if p.invoice_id %}
                 <a href="{{ url_for('rechnung_detail', invoice_id=p.invoice_id) }}">{{ p.invoice_id }}</a>
+                {% elif p.match_rule and p.match_rule.startswith('split_') %}
+                Mehrfach
                 {% else %}
                 —
                 {% endif %}
@@ -74,6 +77,8 @@
             <td>
                 {% if p.matched == 1 %}
                 <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
+                {% elif p.akonto == 1 %}
+                <span class="status-badge status-akonto">🟠 Akonto</span>
                 {% else %}
                 <span class="status-badge status-offen">Offen</span>
                 {% endif %}

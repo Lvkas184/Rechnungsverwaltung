@@ -5,10 +5,9 @@ how many days have passed since issue_date vs. the configured thresholds.
 """
 
 import json
-import sqlite3
 from datetime import datetime
 
-from src.db import PARAM_PATH
+from src.db import PARAM_PATH, get_db, init_db
 
 
 def load_params(path=PARAM_PATH):
@@ -23,8 +22,8 @@ def run_mahnung():
     due_2 = int(p.get("due_days_2", 60))
     today = datetime.utcnow().date()
 
-    conn = sqlite3.connect(DB)
-    conn.row_factory = sqlite3.Row
+    init_db()
+    conn = get_db()
     rows = conn.execute("SELECT * FROM invoices").fetchall()
 
     for inv in rows:

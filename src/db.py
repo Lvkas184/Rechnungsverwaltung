@@ -35,8 +35,42 @@ def init_db(db_path=None):
     conn = get_db(db_path)
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
+    _run_lightweight_migrations(conn)
     conn.commit()
     conn.close()
+
+
+def _ensure_column(conn, table_name, column_name, column_sql):
+    """Add a column if missing (safe for repeated startup execution)."""
+    cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+    if column_name not in cols:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_sql}")
+
+
+def _run_lightweight_migrations(conn):
+    """Apply additive schema migrations for older local databases."""
+    _ensure_column(conn, "payments", "parent_payment_id", "parent_payment_id INTEGER")
+    _ensure_column(conn, "payments", "akonto", "akonto INTEGER DEFAULT 0")
+    _backfill_akonto_payment_flags(conn)
+
+
+def _backfill_akonto_payment_flags(conn):
+    """Classify existing payments as Akonto based on invoice_id/reference_text."""
+    try:
+        from src.payment_rules import is_akonto_payment
+    except Exception:
+        return
+
+    rows = conn.execute(
+        "SELECT payment_id, invoice_id, reference_text, akonto FROM payments"
+    ).fetchall()
+    for row in rows:
+        should_flag = 1 if is_akonto_payment(row["reference_text"], row["invoice_id"]) else 0
+        if int(row["akonto"] or 0) != should_flag:
+            conn.execute(
+                "UPDATE payments SET akonto = ? WHERE payment_id = ?",
+                (should_flag, row["payment_id"]),
+            )
 
 
 def query_db(query, args=(), one=False, db_path=None):

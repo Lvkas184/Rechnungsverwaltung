@@ -1,0 +1,1029 @@
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+
+  const m = ui.createMenu('Rechnungsverwaltung');
+
+  // Untermenü: Importe
+  m.addSubMenu(
+    ui.createMenu('Importe')
+      .addItem('Import Sparkasse anhängen', 'appendImportSparkasse')
+      .addItem('Import VoBa Kraichgau anhängen', 'appendImportVoBaKraichgau')
+      .addItem('Import VoBa Pur anhängen', 'appendImportVoBaPur')
+      .addSeparator()
+      .addItem('Import Rechnungsausgangsbuch anhängen', 'appendImportRAB')
+  );
+
+  // Untermenü: Aktionen
+  m.addSubMenu(
+    ui.createMenu('Aktionen')
+      .addItem('Rechnungsnummern nachtragen (alle Banken)', 'backfillReNrAll')
+      .addItem('Maßnahmen einstellen', 'prefillMassnahmen')
+      .addSeparator()
+      .addItem('Letzten Import rückgängig – Sparkasse', 'rollbackSparkasse')
+      .addItem('Letzten Import rückgängig – VoBa Kraichgau', 'rollbackVoBaKraichgau')
+      .addItem('Letzten Import rückgängig – VoBa Pur', 'rollbackVoBaPur')
+      .addSeparator()
+      .addItem('Duplikate entfernen – Sparkasse', 'dedupeSparkasse')
+      .addItem('Duplikate entfernen – VoBa Kraichgau', 'dedupeVoBaKraichgau')
+      .addItem('Duplikate entfernen – VoBa Pur', 'dedupeVoBaPur')
+  );
+
+  // ===== Jahreswechsel =====
+  m.addSubMenu(
+    ui.createMenu('Jahreswechsel')
+      .addItem('Vorjahr-Quelle setzen (2025)', 'setVorjahrQuelle')
+      .addItem('Alle Rechnungen Vorjahr aktualisieren', 'refreshAlleRechnungenVorjahr')
+      // ===== NEU: Metadaten aus Vorjahr passend zuordnen =====
+      .addItem('Vorjahr-Metadaten in Alle Rechnungen übernehmen', 'syncVorjahrMetaToAlleRechnungen')
+  );
+
+  m.addToUi();
+  setupMahnungColumns_();
+}
+
+
+// optionaler Helfer, um das Log schnell zu öffnen
+function showMahnlisteLog_() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ensureMahnlisteLog_();
+  sh.showSheet();
+  ss.setActiveSheet(sh);
+}
+
+
+// ---------- Utils ----------
+function uiAlert(msg){ SpreadsheetApp.getUi().alert(msg); }
+function normHeader(s) {
+  s = String(s || '');
+  try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); } catch(e){}
+  s = s.replace(/€/g,'eur').toLowerCase().replace(/\s+/g,' ').trim();
+  return s;
+}
+function parseEuro_(x){
+  if (typeof x === 'number') return x;
+  let s = String(x || '')
+    .replace(/\u00A0/g, '')    // NBSP
+    .replace(/\s/g, '')        // Spaces
+    .replace(/[−–]/g, '-')     // Unicode minus
+    .replace(/\./g, '')        // thousands sep
+    .replace(/,/g, '.');       // decimal
+  const n = parseFloat(s);
+  return isNaN(n) ? '' : n;
+}
+function findHeaderRowAndIndices_(sheet, expect, maxScanRows) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  const scanRows = Math.min(maxScanRows || 10, lastRow);
+
+  for (let r = 1; r <= scanRows; r++) {
+    const raw = sheet.getRange(r, 1, 1, lastCol).getValues()[0];
+    const norm = raw.map(normHeader);
+
+    const idx = {};
+    for (const key of Object.keys(expect)) {
+      idx[key] = -1;
+      const syns = expect[key].synonyms || [];
+      for (let c = 0; c < norm.length; c++) {
+        const h = norm[c];
+        if (syns.some(k => h === k || h.includes(k))) { idx[key] = c+1; break; }
+      }
+    }
+
+    const okBank = (idx['betrag'] !== -1 && idx['vwz'] !== -1);
+    if (okBank) return { headerRow: r, idx, lastRow, lastCol };
+  }
+  return null;
+}
+
+// ---------- Banken ----------
+function appendImportSparkasse(){ appendImportBank_('Sparkasse'); }
+function appendImportVoBaKraichgau(){ appendImportBank_('VoBa Kraichgau'); }
+function appendImportVoBaPur(){ appendImportBank_('VoBa Pur'); }
+
+// ---------- Rechnungsausgangsbuch ----------
+
+function appendImportRAB(){
+  const ss = SpreadsheetApp.getActive();
+  const importSheet = ss.getSheetByName('Import Rechnungsausgangsbuch');
+  const targetSheet = ss.getSheetByName('Rechnungsausgangsbuch');
+  if (!importSheet || !targetSheet) return uiAlert('Blätter nicht gefunden.');
+
+  const lastRow = importSheet.getLastRow();
+  const lastCol = importSheet.getLastColumn();
+  if (lastRow < 3) return uiAlert('Erwarte 2-zeilige Kopfzeile (Zeile 1–2) und Daten ab Zeile 3.');
+
+  // --- Kopfzeile NUR aus Zeile 1 lesen (deine CSV-Schlüssel)
+  const row1 = importSheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0].map(v => String(v||'').trim());
+  const idxAmt  = row1.indexOf('EXTF')  + 1;   // Betrag
+  const idxInv  = row1.indexOf('15135') + 1;   // Rechnungsnummer
+  const idxName = row1.indexOf('4')     + 1;   // Name
+  const idxSH   = row1.indexOf('141')   + 1;   // Soll/Haben (S/H)
+
+  if (idxAmt === 0 || idxInv === 0) {
+    return uiAlert('In Zeile 1 nicht gefunden: A1="EXTF" und K1="15135". (Optional: N1="4" Name, B1="141" Soll/Haben)');
+  }
+
+  const startRow = 3;
+  const nRows = lastRow - (startRow - 1);
+  if (nRows < 1) return uiAlert('Keine Datensätze ab Zeile 3 gefunden.');
+
+  // Relevante Spalten als Text lesen
+  const colAmt  = importSheet.getRange(startRow, idxAmt,  nRows, 1).getDisplayValues().map(r => String(r[0]||'').trim());
+  const colInv  = importSheet.getRange(startRow, idxInv,  nRows, 1).getDisplayValues().map(r => String(r[0]||'').trim());
+  const colName = (idxName>0) ? importSheet.getRange(startRow, idxName, nRows, 1).getDisplayValues().map(r => String(r[0]||'').trim()) : Array(nRows).fill('');
+  const colSH   = (idxSH>0)  ? importSheet.getRange(startRow, idxSH,  nRows, 1).getDisplayValues().map(r => String(r[0]||'').trim())   : Array(nRows).fill('');
+
+  // effektive Länge bestimmen
+  const lastIdx = (arr) => { for (let i = arr.length - 1; i >= 0; i--) if (arr[i] !== '') return i; return -1; };
+  const len = Math.max(lastIdx(colAmt), lastIdx(colInv), lastIdx(colName), lastIdx(colSH)) + 1;
+  if (len < 1) { importSheet.getRange(startRow, 1, nRows, lastCol).clearContent(); return uiAlert('Keine verwertbaren Datensätze.'); }
+
+  // Zeilen bauen: [A reNr, B betragText, C name, D status="", E art]
+  const out = [];
+  for (let i = 0; i < len; i++) {
+    const reNr = colInv[i];
+    const betragText = colAmt[i];
+    if (!/^\d{6}$/.test(reNr)) continue;
+    if (betragText === '') continue;
+
+    const sh = (colSH[i] || '').toUpperCase();
+    const art = sh === 'S' ? 'Rechnung' : (sh === 'H' ? 'Gutschrift' : '');
+
+    out.push([reNr, betragText, colName[i] || '', '', art]);
+  }
+  if (out.length === 0) { importSheet.getRange(startRow, 1, len, lastCol).clearContent(); return uiAlert('Keine verwertbaren Rechnungs-Zeilen gefunden.'); }
+
+  // Duplikate vermeiden (nach ReNr in A)
+  const lastExistingRow = targetSheet.getLastRow();
+  let existing = [];
+  if (lastExistingRow >= 2) {
+    existing = targetSheet.getRange(2, 1, lastExistingRow - 1, 1).getValues().flat().map(String).filter(Boolean);
+  }
+  const seen = new Set(existing);
+  const filtered = out.filter(row => !seen.has(row[0]));
+  if (filtered.length === 0) {
+    importSheet.getRange(startRow, 1, len, lastCol).clearContent();
+    return uiAlert('Alle Rechnungsnummern existieren bereits.');
+  }
+
+  // Anhängen: A..E (D = Status bleibt leer, E = Art)
+  const start = targetSheet.getLastRow() + 1;
+  targetSheet.getRange(start, 1, filtered.length, 5).setValues(filtered);
+
+  // Nach ReNr sortieren (ab Zeile 2), Kopf bleibt oben
+  const lastDataRow = targetSheet.getLastRow();
+  const lastDataCol = Math.max(targetSheet.getLastColumn(), 5);
+  if (lastDataRow > 2) {
+    targetSheet.getRange(2, 1, lastDataRow - 1, lastDataCol).sort([{ column: 1, ascending: true }]);
+  }
+
+  // nur den gelesenen Importbereich leeren
+  importSheet.getRange(startRow, 1, len, lastCol).clearContent();
+
+  uiAlert(`${filtered.length} Zeilen → "Rechnungsausgangsbuch" angehängt (inkl. Art) und sortiert.`);
+}
+
+
+function appendImportBank_(bankName){
+  const ss = SpreadsheetApp.getActive();
+  const importSheet = ss.getSheetByName('Import ' + bankName);
+  const targetSheet = ss.getSheetByName('Kontoauszüge ' + bankName);
+  if (!importSheet || !targetSheet) return uiAlert('Blätter nicht gefunden.');
+
+  // Header/Spalten im Import finden – Name ist optional (wird robust gesucht)
+  const meta = findHeaderRowAndIndices_(importSheet, {
+    buch:   { required:false, synonyms: ['buchungsdatum','buchungstag'] },
+    valu:   { required:false, synonyms: ['valutadatum','wertstellung'] },
+    betrag: { required:true,  synonyms: ['betrag in eur','betrag','umsatz'] },
+    vwz:    { required:true,  synonyms: ['verwendungszweck','auftrag/verwendungszweck','vwz','kundenreferenz'] },
+    name:   { required:false, synonyms: ['empfangername/auftraggeber','empfangername','auftraggeber','kundenname','name'] }
+  }, 10);
+
+  if (!meta) return uiAlert('Keine passende Kopfzeile gefunden (Bank-Import).');
+  const { headerRow, idx, lastRow, lastCol } = meta;
+
+  const dataRows = lastRow - headerRow;
+  if (dataRows < 1) return uiAlert('Keine Datensätze unterhalb der Kopfzeile.');
+
+  const rng  = importSheet.getRange(headerRow+1, 1, dataRows, lastCol);
+  const rows = rng.getValues().filter(r => r.join('').trim() !== '');
+
+  const validInvoices = getValidInvoiceSet_();
+
+  // Bereits vorhandene Signaturen laden (für Duplikat-Check)
+  const lastT = targetSheet.getLastRow();
+  const seen = new Set();
+  if (lastT >= 2) {
+    const existing = targetSheet.getRange(2, 1, lastT - 1, 7).getValues(); // A:G
+    for (const v of existing) {
+      // v = [A,B,C,D,E,F,G]; Signatur OHNE Bank/ReNr
+      seen.add(signatureFromRow(v[0], v[1], v[2], v[3], v[4], v[5]));
+    }
+  }
+
+  // Importzeilen vorbereiten
+  const prepared = [];
+  for (const r of rows){
+    const buch   = idx.buch  > 0 ? r[idx.buch-1]   : '';
+    const valu   = idx.valu  > 0 ? r[idx.valu-1]   : '';
+    const betrag = parseEuro_(r[idx.betrag-1]);
+    const vwz    = idx.vwz   > 0 ? String(r[idx.vwz-1] || '') : '';
+    const name   = idx.name  > 0 ? String(r[idx.name-1] || '').trim() : '';
+
+    if (betrag === '') continue;
+
+    const reNr = extractReNr_(vwz, validInvoices);
+    const sig  = signatureFromRow(buch, valu, betrag, vwz, undefined, name);
+
+    // >>> NONREF-Zahlungen NICHT deduplizieren
+    const nonref = isNonRefVWZ(vwz);
+    if (!nonref) {
+      if (seen.has(sig)) continue;   // echtes Duplikat -> überspringen
+      seen.add(sig);
+    }
+
+    // für Rollback merken wir die Signatur mit
+    prepared.push([buch, valu, betrag, vwz, reNr, name, bankName, sig]);
+  }
+
+  if (prepared.length === 0) { rng.clearContent(); return uiAlert('Keine neuen Bank-Zeilen (oder alles Duplikate).'); }
+
+  // Schreiben (ohne Signaturspalte)
+  const values = prepared.map(r => r.slice(0, 7));
+  const start = targetSheet.getLastRow() + 1;
+  targetSheet.getRange(start, 1, values.length, 7).setValues(values);
+
+  // Rollback-Protokoll speichern
+  DP.setProperty('lastImport_' + bankName, JSON.stringify({
+    time: Date.now(),
+    sigs: prepared.map(r => r[7]) // Signaturen
+  }));
+
+  // --- komplette Datenbreite sortieren (nicht nur A:G)
+  const last = targetSheet.getLastRow();
+  const allCols = targetSheet.getLastColumn();
+  if (last > 2) {
+    targetSheet.getRange(2, 1, last - 1, allCols)
+               .sort([{column: 1, ascending: true}]);
+  }
+
+  // manuelle ReNr aus Map wieder anwenden
+  applyManualReNrForBank_(bankName);
+
+  rng.clearContent();
+  uiAlert(`${values.length} Zeilen → "Kontoauszüge ${bankName}" angehängt.`);
+}
+
+
+function debugRAB_strict(){
+  const sh = SpreadsheetApp.getActive().getSheetByName('Import Rechnungsausgangsbuch');
+  const lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  const row1 = sh.getRange(1,1,1,lastCol).getDisplayValues()[0];
+  const row3Amt = sh.getRange(3,1,1,lastCol).getDisplayValues()[0][0];
+  const row3Inv = sh.getRange(3,11,1,1).getDisplayValues()[0][0]; // K = 11
+  SpreadsheetApp.getUi().alert(
+    'Rows: ' + lastRow + ' | Cols: ' + lastCol +
+    '\nRow1[1]=' + row1[0] + ' | Row1[11]=' + (row1[10] || '') +
+    '\nRow3 Amt(A3)=' + row3Amt + ' | Row3 Inv(K3)=' + row3Inv
+  );
+}
+
+function getValidInvoiceSet_(){
+  const sh = SpreadsheetApp.getActive().getSheetByName('Rechnungsausgangsbuch');
+  if (!sh) return new Set();
+  const n = Math.max(0, sh.getLastRow() - 1);
+  const vals = n ? sh.getRange(2,1,n,1).getValues().flat() : [];
+  const s = new Set();
+  vals.forEach(v => { v = String(v||'').trim(); if (/^\d{6}$/.test(v)) s.add(v); });
+  return s;
+}
+
+
+/* ---------------------- RECHNUNGSNUMMER erkennen (12-stellig mit 7.=1) ---------------------- */
+function extractReNr_(text, validSet){
+  const s = String(text || '');
+  const yyNow = parseInt(
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Europe/Berlin', 'yy'),
+    10
+  );
+
+  // EREF-Blöcke entfernen
+  const t = s.replace(/EREF\+[\s\S]*?(?=(?:SVWZ|KREF|MREF|BREF)\+|$)/ig, ' ');
+
+  const isYearOk = (nr) => {
+    if (!/^\d{6}$/.test(nr)) return false;
+    const yy = parseInt(nr.slice(0,2), 10);
+    return yy >= 20 && yy <= yyNow;
+  };
+
+  // Nur "ausbuchstabiert": jede Ziffer getrennt, z. B. "2 5 0 0 8 1"
+  function spelledOutSixDigitsOrEmpty(fragment) {
+    if (/\d{2}/.test(fragment)) return '';            // irgendwo zwei Ziffern direkt nebeneinander -> raus
+    const digitsOnly = fragment.replace(/\D/g, '');
+    return digitsOnly.length === 6 ? digitsOnly : '';
+  }
+
+  const candidates = [];
+  const add = (nr, scoreBase, why) => {
+    if (!isYearOk(nr)) return;
+    const inRab = validSet ? validSet.has(nr) : false;
+    const score = scoreBase + (inRab ? 3 : 0);
+    candidates.push({ nr, score, inRab, why });
+  };
+
+  // 0) Sehr stark: direkt nach SVWZ+ / NONREFSVWZ+ exakt 6 Ziffern
+  let m = t.match(/(?:\b(?:nonref)?svwz\+)\s*(\d{6})(?!\d)/i);
+  if (m) add(m[1], 12, 'svwz-direct');
+
+  // 0b) SVWZ+ R + 12 Ziffern, 7. Stelle = 1 => erste 6 nehmen
+  m = t.match(/(?:\b(?:nonref)?svwz\+)\s*r\s*[:\-#.]?\s*(\d{6})1\d{5}(?!\d)/i);
+  if (m) add(m[1], 12, 'svwz-r-12digits-7th1');
+
+  // 1) Keywords + kompakte 6 Ziffern
+  m = t.match(/(?:re(?:chnung|[-\s]*nr\.?)|rechnungsnummer|re\.?\s*nr\.?|rg\s*nr|r\.?nr|rn)\s*[:\-#.]?\s*(\d{6})(?!\d)(?:[\/\-\.](?:\d{2}|\d{4}))?/i);
+  if (m) add(m[1], 9, 'kw-6');
+
+  // 1b) Alleinstehendes "R" + 12 Ziffern, 7. Stelle = 1 => erste 6
+  m = t.match(/\br\s*[:\-#.]?\s*(\d{6})1\d{5}(?!\d)/i);
+  if (m) add(m[1], 11, 'r-12digits-7th1');
+
+  // 1c) Beliebige isolierte 12-stellige Zahl, 7. Stelle = 1 => erste 6
+  const re12 = /(?<!\d)(\d{6})1\d{5}(?!\d)/g;
+  let k;
+  while ((k = re12.exec(t)) !== null) {
+    add(k[1], 10, 'any-12digits-7th1');
+  }
+
+  // 2) Keywords + "ausbuchstabierte" 6 Ziffern (keine zweistelligen Segmente!)
+  m = t.match(/(?:re(?:chnung|[-\s]*nr\.?)|rechnungsnummer|re\.?\s*nr\.?|rg\s*nr|r\.?nr|rn)\s*[:\-#.]?\s*((?:\d\s*){6,})/i);
+  if (m) {
+    const six = spelledOutSixDigitsOrEmpty(m[1]);
+    if (six) add(six, 9, 'kw-6-spaced');
+  }
+
+  // 3) Tokens zusammengezogen (RG251234, RE.NR251234, …)
+  m = t.match(/(?:\br\b|rg|re\s*nr|renr|rnr|re\.?nr\.?)\s*[:\-#.]?\s*(\d{6})(?!\d)/i);
+  if (m) add(m[1], 8, 'token-attach');
+
+  // 4) Generisch: isolierte 6er-Sequenzen
+  const reIso = /(?<!\d)(\d{6})(?!\d)/g;
+  let a;
+  while ((a = reIso.exec(t)) !== null){
+    const nr = a[1];
+    const start = a.index, end = start + 6;
+    const ctx = t.slice(Math.max(0, start - 20), Math.min(t.length, end + 20)).toLowerCase();
+    const nearKw = /(rechnung|rechnungsnummer|\brg\b|\brn\b|r\-?nr|re\.?nr)/.test(ctx) ? 1 : 0;
+    add(nr, 4 + nearKw, 'loose-boundary');
+  }
+
+  // 5) Längere Ziffern-/Leerzeichenfolge – nur „ausbuchstabiert“
+  const reSpacedRun = /((?:\d\s*){6,})/g;
+  while ((a = reSpacedRun.exec(t)) !== null){
+    const run = a[1];
+    if (/\d{2}/.test(run)) continue;                 // keine Doppelziffern im Run
+    const digits = run.replace(/\D/g,'');
+    if (digits.length !== 6) continue;
+
+    const nr = digits;
+
+    // Schutz vor Datum+Betrag-Fenstern
+    const start = a.index, end = start + run.length;
+    const window = t.slice(Math.max(0, start - 20), Math.min(t.length, end + 20));
+    if (/\d{2}\.\d{2}\.\d{4}[^0-9]{0,10}\d+[.,]\d{2}/.test(window)) continue;
+
+    const ctx = window.toLowerCase();
+    const nearKw = /(rechnung|rechnungsnummer|\brg\b|\brn\b|r\-?nr|re\.?nr)/.test(ctx) ? 1 : 0;
+    add(nr, 3 + nearKw, 'head-of-spaced-run');
+  }
+
+  if (candidates.length === 0) return '';
+  const rabOnly = candidates.filter(c => c.inRab);
+  const pool = rabOnly.length ? rabOnly : candidates;
+  pool.sort((x, y) => y.score - x.score);
+  return pool[0].nr;
+}
+
+
+/* ---------------------- ReNr nachtragen ---------------------- */
+function backfillReNr(bankName){
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName('Kontoauszüge ' + bankName);
+  if (!sh) return uiAlert('Blatt nicht gefunden: Kontoauszüge ' + bankName);
+
+  const last = sh.getLastRow();
+  if (last < 2) return uiAlert('Keine Daten in Kontoauszüge ' + bankName);
+
+  const vwz = sh.getRange(2, 4, last - 1, 1).getValues(); // Spalte D
+  const validInvoices = getValidInvoiceSet_();
+
+  const out = vwz.map(r => [ extractReNr_(r[0], validInvoices) ]);
+  sh.getRange(2, 5, out.length, 1).setValues(out); // in Spalte E schreiben
+
+  // manuelle ReNr aus Map wieder anwenden
+  const sheetName = sh.getName().replace('Kontoauszüge ', '');
+  applyManualReNrForBank_(sheetName);
+
+  uiAlert('Rechnungsnummern nachgetragen in Kontoauszüge ' + bankName + ': ' + out.length + ' Zeilen.');
+}
+
+function backfillReNrAll(){
+  backfillReNr('Sparkasse');
+  backfillReNr('VoBa Kraichgau');
+  backfillReNr('VoBa Pur');
+}
+
+// ----- Einstellungen -----
+const SHEET_ALL = 'Alle Rechnungen';  // Blattname
+const COL_STATUS = 7;                 // G
+const COL_MASS   = 9;                 // I
+const COL_RENR_MANUELL = 9;           // I (Kontoauszüge: "Rechnungsnummer manuell")
+
+function prefillMassnahmen() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_ALL);
+  if (!sh) return;
+
+  const last = sh.getLastRow();
+  if (last < 2) {
+    SpreadsheetApp.getUi().alert('Keine Daten in "' + SHEET_ALL + '".');
+    return;
+  }
+
+  // Normalisierung
+  const norm = (x) => String(x || '')
+    .replace(/\u00A0/g,' ')
+    .trim()
+    .toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue')
+    .replace(/ß/g,'ss')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ');
+
+  const statusRng  = sh.getRange(2, COL_STATUS, last - 1, 1); // G
+  const massRng    = sh.getRange(2, COL_MASS,   last - 1, 1); // I
+  const statusVals = statusRng.getDisplayValues();
+  const massVals   = massRng.getDisplayValues();
+
+  let toPaid = 0, toClarify = 0;
+
+  for (let i = 0; i < statusVals.length; i++) {
+    const s = norm(statusVals[i][0]);
+    const m = norm(massVals[i][0]);
+
+    if (s === '') continue;
+
+    const needsKlaerung = (s === 'offen' || s === 'ueberzahlung' || s === 'teiloffen/unterzahlung');
+
+    if (m === '') {
+      if (s === 'bezahlt') {
+        massVals[i][0] = 'bezahlt';
+        toPaid++;
+        continue;
+      }
+      if (needsKlaerung) {
+        massVals[i][0] = 'in Klärung';
+        toClarify++;
+        continue;
+      }
+    }
+
+    if ((m === 'in klaerung' || m === 'in klarung') && s === 'bezahlt') {
+      massVals[i][0] = 'bezahlt';
+      toPaid++;
+      continue;
+    }
+
+    if (m === 'bezahlt' && needsKlaerung) {
+      massVals[i][0] = 'in Klärung';
+      toClarify++;
+      continue;
+    }
+  }
+
+  if (toPaid || toClarify) massRng.setValues(massVals);
+  SpreadsheetApp.getUi().alert(`Maßnahmen aktualisiert: ${toPaid} → "bezahlt", ${toClarify} → "in Klärung".`);
+}
+
+
+
+const DP = PropertiesService.getDocumentProperties();
+
+function _tz() {
+  return Session.getScriptTimeZone() || 'Europe/Berlin';
+}
+function _normDate(d) {
+  if (Object.prototype.toString.call(d) === '[object Date]' && !isNaN(d)) {
+    return Utilities.formatDate(d, _tz(), 'yyyy-MM-dd');
+  }
+  return String(d || '').trim();
+}
+function _normText(s) {
+  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Eindeutige Signatur eines Kontoauszug-Eintrags
+ * Reihenfolge: Buchung, Valuta, Betrag(2 Dez), Verwendungszweck, Name
+ */
+function signatureFromRow(a, b, c, d, /*e=*/_, f /*name*/) {
+  const amt = (typeof c === 'number' ? c : parseEuro_(c));
+  const cents = (amt === '' || isNaN(amt)) ? '' : Number(amt).toFixed(2);
+  return [_normDate(a), _normDate(b), cents, _normText(d), _normText(f)].join('¦');
+}
+
+function rollbackLastImport(bankName){
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName('Kontoauszüge ' + bankName);
+  if (!sh) return uiAlert('Blatt nicht gefunden: Kontoauszüge ' + bankName);
+
+  const raw = DP.getProperty('lastImport_' + bankName);
+  if (!raw) return uiAlert('Kein protokollierter Import für "' + bankName + '".');
+
+  const meta = JSON.parse(raw);
+  const sigs = new Set(meta.sigs || []);
+  if (!sigs.size) return uiAlert('Protokoll leer.');
+
+  const n = sh.getLastRow();
+  if (n < 2) return uiAlert('Keine Daten vorhanden.');
+
+  const vals = sh.getRange(2, 1, n - 1, 7).getValues(); // A:G
+  const toDelete = [];
+  for (let i = vals.length - 1; i >= 0; i--){
+    const v = vals[i];
+    const sig = signatureFromRow(v[0], v[1], v[2], v[3], v[4], v[5]);
+    if (sigs.has(sig)) {
+      toDelete.push(i + 2);
+      sigs.delete(sig);
+      if (sigs.size === 0) break;
+    }
+  }
+  if (!toDelete.length) return uiAlert('Es wurde nichts Passendes zum Löschen gefunden.');
+
+  toDelete.forEach(r => sh.deleteRow(r));
+  DP.deleteProperty('lastImport_' + bankName);
+  uiAlert('Rollback erledigt. Gelöschte Zeilen: ' + toDelete.length);
+}
+
+function rollbackSparkasse(){ rollbackLastImport('Sparkasse'); }
+function rollbackVoBaKraichgau(){ rollbackLastImport('VoBa Kraichgau'); }
+function rollbackVoBaPur(){ rollbackLastImport('VoBa Pur'); }
+
+function dedupeBank(bankName){
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName('Kontoauszüge ' + bankName);
+  if (!sh) return uiAlert('Blatt nicht gefunden: Kontoauszüge ' + bankName);
+
+  const n = sh.getLastRow();
+  if (n < 3) return uiAlert('Keine oder kaum Daten.');
+
+  const vals = sh.getRange(2, 1, n - 1, 7).getValues(); // A:G
+  const seen = new Set();
+  const del = [];
+
+  for (let i = vals.length - 1; i >= 0; i--){
+    const v = vals[i];
+    const vwz = v[3];
+
+    if (isNonRefVWZ(vwz)) continue;
+
+    const sig = signatureFromRow(v[0], v[1], v[2], vwz, v[4], v[5]);
+    if (seen.has(sig)) del.push(i + 2);
+    else seen.add(sig);
+  }
+
+  del.forEach(r => sh.deleteRow(r));
+  uiAlert('Entfernte Duplikate: ' + del.length);
+}
+function isNonRefVWZ(vwz) {
+  const s = String(vwz || '').toLowerCase().trim();
+
+  // Robuste Erkennung:
+  // - "kref+nonref" irgendwo im String (nicht nur am Anfang)
+  // - "nonrefsvwz+" als Prefix (einige Banken)
+  // - "svwz+" ohne Inhalt
+  if (s.includes('kref+nonref')) return true;
+  if (s.startsWith('nonrefsvwz+')) return true;
+  if (/^svwz\+\s*$/.test(s)) return true;
+
+  return false;
+}
+
+function dedupeSparkasse(){ dedupeBank('Sparkasse'); }
+function dedupeVoBaKraichgau(){ dedupeBank('VoBa Kraichgau'); }
+function dedupeVoBaPur(){ dedupeBank('VoBa Pur'); }
+
+
+/* ---------------------- MANUELLE ReNr-Map ---------------------- */
+function ensureManualMapSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  const name = 'Manuelle ReNr Map';
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1,1,1,3).setValues([['Signatur','ReNr','Zuletzt aktualisiert']]);
+    sh.hideSheet();
+  }
+  return sh;
+}
+function saveManualReNr_(sig, renr) {
+  renr = String(renr || '').trim();
+  if (!sig || !/^\d{6}$/.test(renr)) return;
+  const sh = ensureManualMapSheet_();
+  const last = sh.getLastRow();
+  if (last >= 2) {
+    const sigs = sh.getRange(2,1,last-1,1).getValues().flat();
+    for (let i = 0; i < sigs.length; i++) {
+      if (sigs[i] === sig) {
+        sh.getRange(i+2, 2, 1, 2).setValues([[renr, new Date()]]);
+        return;
+      }
+    }
+  }
+  sh.appendRow([sig, renr, new Date()]);
+}
+function loadManualMap_() {
+  const sh = ensureManualMapSheet_();
+  const last = sh.getLastRow();
+  const map = new Map();
+  if (last < 2) return map;
+  const vals = sh.getRange(2,1,last-1,2).getValues();
+  for (const [sig, reNr] of vals) {
+    if (sig && reNr) map.set(sig, String(reNr));
+  }
+  return map;
+}
+function applyManualReNrForBank_(bankName) {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName('Kontoauszüge ' + bankName);
+  if (!sh) return;
+
+  const last = sh.getLastRow();
+  if (last < 2) return;
+
+  const rows = sh.getRange(2, 1, last - 1, 7).getValues();         // A..G
+  const manualRng = sh.getRange(2, COL_RENR_MANUELL, last - 1, 1);  // I
+  const manualVals = manualRng.getValues();
+  const map = loadManualMap_();
+
+  let updates = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (String(manualVals[i][0] || '').trim() !== '') continue;
+    const v = rows[i];
+    const sig = signatureFromRow(v[0], v[1], v[2], v[3], undefined, v[5]);
+    const re = map.get(sig);
+    if (re) { manualVals[i][0] = re; updates++; }
+  }
+  if (updates) manualRng.setValues(manualVals);
+}
+
+
+/***** ===================== Mahnung in "Alle Rechnungen" pflegen ===================== *****/
+
+const COL_MAHNSTATUS_ALL = 11; // K
+const COL_MAHNDATUM_ALL  = 12; // L
+const MAHNUNG_STATUS_LIST = [
+  'ausstehend',
+  'gesendet',
+  '2. Mahnung gesendet',
+  'Anwalt',
+  'in Klärung'
+];
+
+const SHEET_MAHNLISTE = 'Mahnliste';
+const ML_COL_STATUS   = 9;   // I
+const ML_COL_DATUM    = 10;  // J
+
+function setupMahnungColumns_() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(SHEET_ALL);
+  if (!sh) return;
+
+  if (!String(sh.getRange(1, COL_MAHNSTATUS_ALL).getValue() || '').trim())
+    sh.getRange(1, COL_MAHNSTATUS_ALL).setValue('mahnung_status');
+  if (!String(sh.getRange(1, COL_MAHNDATUM_ALL).getValue() || '').trim())
+    sh.getRange(1, COL_MAHNDATUM_ALL).setValue('Datum Mahnung');
+
+  const last = Math.max(2, sh.getLastRow());
+
+  const dvStatus = SpreadsheetApp.newDataValidation()
+    .requireValueInList(MAHNUNG_STATUS_LIST, true)
+    .setAllowInvalid(false)
+    .setHelpText('Mahnstatus wählen')
+    .build();
+  sh.getRange(2, COL_MAHNSTATUS_ALL, last - 1, 1).setDataValidation(dvStatus);
+
+  const dvDate = SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(true).build();
+  sh.getRange(2, COL_MAHNDATUM_ALL, last - 1, 1)
+    .setDataValidation(dvDate)
+    .setNumberFormat('dd.MM.yyyy');
+}
+
+function onEditMahnung_(e){
+  try {
+    const r  = e.range;
+    const sh = r.getSheet();
+    if (sh.getName() !== SHEET_ALL) return;
+    if (r.getRow() < 2) return;
+
+    if (r.getColumn() === COL_MAHNSTATUS_ALL) {
+      return;
+    }
+  } catch(_) {}
+}
+
+function onEditMirrorMahnliste_(e){
+  const r = e.range, sh = r.getSheet();
+  if (sh.getName() !== SHEET_MAHNLISTE) return;
+  if (r.getRow() < 2) return;
+  if (![ML_COL_STATUS, ML_COL_DATUM].includes(r.getColumn())) return;
+
+  const reNr = String(sh.getRange(r.getRow(), 1).getDisplayValue() || '').trim();
+  if (!reNr) return;
+
+  const all = SpreadsheetApp.getActive().getSheetByName(SHEET_ALL);
+  if (!all) return;
+
+  const last = all.getLastRow();
+  if (last < 2) return;
+
+  const found = all.getRange(2, 1, last - 1, 1)
+                   .createTextFinder(reNr).matchEntireCell(true).findNext();
+  if (!found) return;
+
+  const rowAll = found.getRow();
+
+  if (r.getColumn() === ML_COL_STATUS) {
+    const newStatus = String(e.value || '').trim();
+    all.getRange(rowAll, COL_MAHNSTATUS_ALL).setValue(newStatus);
+  } else {
+    const v = sh.getRange(r.getRow(), ML_COL_DATUM).getValue();
+    all.getRange(rowAll, COL_MAHNDATUM_ALL).setValue(v);
+  }
+}
+
+function onEdit(e) {
+  try {
+    const r = e.range;
+    const sh = r.getSheet();
+    const name = sh.getName();
+
+    onEditMahnung_(e);
+    onEditMirrorMahnliste_(e);
+
+    if (name === SHEET_ALL) {
+      if (r.getColumn() !== COL_STATUS || r.getRow() < 2) return;
+
+      const massCell = sh.getRange(r.getRow(), COL_MASS);
+      if (String(massCell.getValue() || '').trim() !== '') return;
+
+      const s = String(e.value || '').toLowerCase();
+      if (s === 'bezahlt') massCell.setValue('bezahlt');
+      else if (['offen', 'überzahlung', 'ueberzahlung', 'teiloffen/unterzahlung'].includes(s))
+        massCell.setValue('in Klärung');
+      return;
+    }
+
+    if (name.startsWith('Kontoauszüge ') && r.getRow() >= 2 && r.getColumn() === COL_RENR_MANUELL) {
+      const rowVals = sh.getRange(r.getRow(), 1, 1, 7).getValues()[0];
+      const sig = signatureFromRow(rowVals[0], rowVals[1], rowVals[2], rowVals[3], undefined, rowVals[5]);
+      const val = String(e.value || '').trim();
+      if (/^\d{6}$/.test(val)) saveManualReNr_(sig, val);
+      return;
+    }
+
+  } catch (err) {
+    // still und leise
+  }
+}
+
+
+/***** ===================== VORJAHR -> "Alle Rechnungen Vorjahr" ===================== *****/
+
+const SHEET_VORJAHR = 'Alle Rechnungen Vorjahr';
+const PROP_VORJAHR_SOURCE_ID = 'vorjahr_source_spreadsheet_id';
+
+function setVorjahrQuelle(){
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt(
+    'Vorjahr-Quelle setzen',
+    'Bitte URL oder Spreadsheet-ID der Datei "Rechnungsverwaltung 2025" einfügen:',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  const id = extractSpreadsheetId_(res.getResponseText());
+  if (!id) return uiAlert('Konnte keine Spreadsheet-ID erkennen. Bitte URL oder ID prüfen.');
+
+  DP.setProperty(PROP_VORJAHR_SOURCE_ID, id);
+  uiAlert('Vorjahr-Quelle gespeichert.');
+}
+
+function refreshAlleRechnungenVorjahr(){
+  const id = DP.getProperty(PROP_VORJAHR_SOURCE_ID);
+  if (!id) return uiAlert('Keine Vorjahr-Quelle gespeichert. Bitte zuerst "Vorjahr-Quelle setzen (2025)" ausführen.');
+
+  buildAlleRechnungenVorjahr_(id);
+}
+
+function buildAlleRechnungenVorjahr_(sourceSpreadsheetId){
+  const targetSS = SpreadsheetApp.getActive();
+  const sourceSS = SpreadsheetApp.openById(sourceSpreadsheetId);
+
+  const src = sourceSS.getSheetByName(SHEET_ALL);
+  if (!src) return uiAlert('Quelle: Blatt "${SHEET_ALL}" nicht gefunden.');
+
+  const lastRow = src.getLastRow();
+  const lastCol = src.getLastColumn();
+  if (lastRow < 2) return uiAlert('Quelle enthält keine Daten (unterhalb der Kopfzeile).');
+
+  // Ganze Kopfzeile lesen, Spalten anhand Headern finden
+  const headerRow = src.getRange(1, 1, 1, lastCol).getValues()[0];
+  const idx = findAlleRechnungenCols_(headerRow);
+
+  if (idx.reNr < 0) return uiAlert('Quelle: Spalte "Rechnungsnummer" nicht gefunden.');
+  if (idx.mass < 0) return uiAlert('Quelle: Spalte "maßnahme" nicht gefunden.');
+
+  // Daten lesen
+  const data = src.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+  // Ziel-Header (fix A:L in gewünschter Reihenfolge)
+  const outHeader = [
+    'Rechnungsnummer','name','betrag_brutto','gezahlt_sum_eur','letzte_zahlung','anzahl_zahlungen',
+    'status','abweichung_eur','maßnahme','bemerkung','mahnung_status','Datum Mahnung'
+  ];
+
+  const out = [outHeader];
+
+  for (let i = 0; i < data.length; i++){
+    const row = data[i];
+    const mass = normMassnahme_(row[idx.mass]);
+
+    // Nur "in Klärung"
+    if (mass !== 'in klaerung') continue;
+
+    out.push([
+      idx.reNr      >= 0 ? row[idx.reNr]      : '',
+      idx.name      >= 0 ? row[idx.name]      : '',
+      idx.betrag    >= 0 ? row[idx.betrag]    : '',
+      idx.gezahlt   >= 0 ? row[idx.gezahlt]   : '',
+      idx.letzte    >= 0 ? row[idx.letzte]    : '',
+      idx.anzahl    >= 0 ? row[idx.anzahl]    : '',
+      idx.status    >= 0 ? row[idx.status]    : '',
+      idx.abw       >= 0 ? row[idx.abw]       : '',
+      idx.mass      >= 0 ? row[idx.mass]      : '',
+      idx.bemerk    >= 0 ? row[idx.bemerk]    : '',
+      idx.mahnstat  >= 0 ? row[idx.mahnstat]  : '',
+      idx.mahndat   >= 0 ? row[idx.mahndat]   : ''
+    ]);
+  }
+
+  // Zielblatt: erstellen, wenn nicht vorhanden
+  let dest = targetSS.getSheetByName(SHEET_VORJAHR);
+  if (!dest){
+    const template = targetSS.getSheetByName(SHEET_ALL);
+    dest = template ? template.copyTo(targetSS).setName(SHEET_VORJAHR)
+                    : targetSS.insertSheet(SHEET_VORJAHR);
+  }
+
+  // ggf. vorhandene Spill-Formel entfernen
+  clearInvoiceSpillFormula_(dest);
+
+  // Inhalt leeren (A:L)
+  const maxRows = dest.getMaxRows();
+  if (maxRows > 1) dest.getRange(2, 1, maxRows - 1, 12).clearContent();
+
+  // Header schreiben
+  dest.getRange(1, 1, 1, 12).setValues([outHeader]);
+
+  // Daten schreiben + sortieren nach Rechnungsnummer
+  if (out.length > 1){
+    dest.getRange(2, 1, out.length - 1, 12).setValues(out.slice(1));
+    dest.getRange(2, 1, out.length - 1, 12).sort([{ column: 1, ascending: true }]);
+  }
+
+  // Datumsspalte formatieren (falls nötig)
+  dest.getRange(2, 12, Math.max(1, dest.getLastRow()-1), 1).setNumberFormat('dd.MM.yyyy');
+
+  uiAlert('"${SHEET_VORJAHR}" aktualisiert: ${out.length - 1} Zeilen mit Maßnahme "in Klärung" (inkl. Bemerkung/Mahnstatus/Datum).');
+}
+
+function findAlleRechnungenCols_(headerRow){
+  const norm = headerRow.map(normHeader);
+
+  const find = (syns) => {
+    for (let i = 0; i < norm.length; i++){
+      const h = norm[i];
+      for (const s of syns){
+        if (h === s || h.includes(s)) return i;
+      }
+    }
+    return -1;
+  };
+
+  return {
+    reNr:     find(['rechnungsnummer']),
+    name:     find(['name']),
+    betrag:   find(['betrag_brutto','betrag brutto','betrag']),
+    gezahlt:  find(['gezahlt_sum_eur','gezahlt sum eur','gezahlt_sum','gezahlt']),
+    letzte:   find(['letzte_zahlung','letzte zahlung']),
+    anzahl:   find(['anzahl_zahlungen','anzahl zahlungen','anzahl']),
+    status:   find(['status']),
+    abw:      find(['abweichung_eur','abweichung eur','abweichung']),
+    mass:     find(['massnahme','maßnahme']),
+    bemerk:   find(['bemerkung']),
+    mahnstat: find(['mahnung_status','mahnstatus']),
+    mahndat:  find(['datum mahnung','mahndatum'])
+  };
+}
+
+function normMassnahme_(x) {
+  return String(x || '')
+    .replace(/\u00A0/g,' ')
+    .trim()
+    .toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue')
+    .replace(/ß/g,'ss')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ');
+}
+
+function clearInvoiceSpillFormula_(sh){
+  const formulas = sh.getRange(2, 1, 1, 4).getFormulas()[0];
+  for (let c = 0; c < formulas.length; c++){
+    const f = formulas[c];
+    if (f && /rechnungsausgangsbuch|sort\(|filter\(|query\(/i.test(f)) {
+      sh.getRange(2, c + 1).clearContent();
+      return;
+    }
+  }
+}
+
+function extractSpreadsheetId_(input){
+  const s = String(input || '').trim();
+
+  let m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (m) return m[1];
+
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(s)) return s;
+
+  return '';
+}
+
+
+/***** ===================== NEU: Vorjahr-Metadaten passend in 2026 zuordnen ===================== *****/
+/**
+ * Kopiert für alle Rechnungsnummern, die im Blatt "Alle Rechnungen Vorjahr" existieren,
+ * die Spalten I–L (Maßnahme, Bemerkung, Mahnstatus, Datum Mahnung) in das Blatt "Alle Rechnungen".
+ *
+ * Zweck: Bei dynamischer Liste (Vorjahr oben + neu unten) verrutschen manuell gepflegte Spalten sonst.
+ */
+function syncVorjahrMetaToAlleRechnungen(){
+  const ss = SpreadsheetApp.getActive();
+  const shAll = ss.getSheetByName(SHEET_ALL);
+  const shPrev = ss.getSheetByName(SHEET_VORJAHR);
+  if (!shAll || !shPrev) return uiAlert('Blätter nicht gefunden: "Alle Rechnungen" oder "Alle Rechnungen Vorjahr".');
+
+  const lastAll = shAll.getLastRow();
+  if (lastAll < 2) return uiAlert('Keine Daten in "Alle Rechnungen".');
+
+  const lastPrev = shPrev.getLastRow();
+  if (lastPrev < 2) return uiAlert('Keine Daten in "Alle Rechnungen Vorjahr".');
+
+  // Vorjahr A:L lesen und Map bauen (Key = Rechnungsnummer)
+  const prev = shPrev.getRange(2, 1, lastPrev - 1, 12).getValues(); // A..L
+  const prevMap = new Map();
+  for (const r of prev){
+    const reNr = String(r[0] || '').trim(); // A
+    if (!reNr) continue;
+    prevMap.set(reNr, {
+      mass: r[8],   // I
+      bem:  r[9],   // J
+      ms:   r[10],  // K
+      md:   r[11]   // L
+    });
+  }
+
+  // In 2026 alle Rechnungsnummern lesen
+  const invs = shAll.getRange(2, 1, lastAll - 1, 1).getValues().flat().map(v => String(v||'').trim());
+
+  // Zielbereich I:L lesen (und dann in einem Rutsch zurückschreiben)
+  const metaRng = shAll.getRange(2, 9, lastAll - 1, 4); // I..L
+  const meta = metaRng.getValues();
+
+  let changed = 0;
+  for (let i = 0; i < invs.length; i++){
+    const reNr = invs[i];
+    if (!reNr) continue;
+
+    const p = prevMap.get(reNr);
+    if (!p) continue; // nur Vorjahr-Rechnungen überschreiben
+
+    meta[i][0] = p.mass;
+    meta[i][1] = p.bem;
+    meta[i][2] = p.ms;
+    meta[i][3] = p.md;
+    changed++;
+  }
+
+  if (changed) metaRng.setValues(meta);
+  uiAlert(`Vorjahr-Metadaten übernommen: ${changed} Zeilen aktualisiert (I–L).`);
+}

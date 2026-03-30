@@ -470,6 +470,11 @@ h2 {
     color: #2563eb;
 }
 
+.status-akonto {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
 .mahnung-badge {
     display: inline-block;
     padding: 4px 12px;

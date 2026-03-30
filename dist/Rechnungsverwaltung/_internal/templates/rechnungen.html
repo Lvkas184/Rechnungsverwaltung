@@ -13,6 +13,7 @@
             <option value="Bezahlt" {{ 'selected' if status_filter == 'Bezahlt' }}>🟢 Bezahlt</option>
             <option value="Teiloffen/Unterzahlung" {{ 'selected' if status_filter == 'Teiloffen/Unterzahlung' }}>🟡 Teiloffen</option>
             <option value="Überzahlung" {{ 'selected' if status_filter == 'Überzahlung' }}>🔵 Überzahlung</option>
+            <option value="Akonto" {{ 'selected' if status_filter == 'Akonto' }}>🟠 Akonto</option>
         </select>
 
         <select name="per_page" class="filter-select" onchange="this.form.submit()">

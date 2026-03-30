@@ -1,4 +1,4 @@
-^"""Import JSON sheet dumps from data/ into SQLite DB."""
+"""Import JSON sheet dumps from data/ into SQLite DB."""
 
 import glob
 import json

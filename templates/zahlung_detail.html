@@ -63,14 +63,34 @@
             <dd>
                 {% if pay.matched == 1 %}
                 <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
+                {% elif pay.akonto == 1 %}
+                <span class="status-badge status-akonto">🟠 Akonto (ohne Matching)</span>
                 {% else %}
                 <span class="status-badge status-offen">Offen (Nicht zugeordnet)</span>
                 {% endif %}
             </dd>
 
+            {% if parent_payment %}
+            <dt>Sammelzahlung</dt>
+            <dd>
+                <a href="{{ url_for('zahlung_detail', payment_id=parent_payment.payment_id) }}" class="btn btn-secondary" style="font-size: 14px; padding: 4px 8px;">
+                    📦 Parent #{{ parent_payment.payment_id }} ansehen
+                </a>
+            </dd>
+            {% endif %}
+
             <dt>Zugeordnete Rechnung</dt>
             <dd>
-                {% if pay.invoice_id %}
+                {% if split_invoices %}
+                    {% for split in split_invoices %}
+                    <div style="margin-bottom: 8px;">
+                        <a href="{{ url_for('rechnung_detail', invoice_id=split.invoice_id) }}" class="btn btn-secondary" style="font-size: 14px; padding: 4px 8px;">
+                            📄 Rechnung #{{ split.invoice_id }} ansehen
+                        </a>
+                        <span style="margin-left: 8px; font-weight: 600;">{{ split.amount_eur | format_eur }}</span>
+                    </div>
+                    {% endfor %}
+                {% elif pay.invoice_id %}
                 <a href="{{ url_for('rechnung_detail', invoice_id=pay.invoice_id) }}" class="btn btn-secondary" style="font-size: 14px; padding: 4px 8px;">
                     📄 Rechnung #{{ pay.invoice_id }} ansehen
                 </a>
@@ -86,6 +106,34 @@
             <dd><span class="badge">{{ pay.match_rule or "—" }}</span></dd>
         </dl>
     </div>
+</div>
+
+<div class="card">
+    <h2>Manuelle Zuordnung</h2>
+    <p class="page-desc">
+        Diese Aktionen überschreiben die aktuelle Zuordnung. Manuelle Zuordnungen bleiben bei
+        "Matching starten" und "Status aktualisieren" bestehen.
+    </p>
+
+    <form method="POST" action="{{ url_for('zahlung_manual_assign', payment_id=pay.payment_id) }}" class="inline-form" style="margin-bottom: 16px;">
+        <div class="form-group">
+            <label for="manual_invoice_id">Rechnung manuell setzen</label>
+            <input type="number" name="invoice_id" id="manual_invoice_id" class="form-input" placeholder="z.B. 260644" required>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Auf Rechnung zuordnen</button>
+    </form>
+
+    <form method="POST" action="{{ url_for('zahlung_manual_split', payment_id=pay.payment_id) }}" class="inline-form" style="align-items: stretch; margin-bottom: 16px;">
+        <div class="form-group" style="flex: 2; min-width: 320px;">
+            <label for="manual_split_allocations">Zahlung auf mehrere Rechnungen aufteilen</label>
+            <textarea name="allocations" id="manual_split_allocations" class="form-input" rows="4" placeholder="Eine Zeile pro Zuordnung, Format: Rechnungsnummer=Betrag&#10;260643=381,69&#10;260644=61,70" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-warning">🧩 Aufteilen und speichern</button>
+    </form>
+
+    <form method="POST" action="{{ url_for('zahlung_manual_clear', payment_id=pay.payment_id) }}">
+        <button type="submit" class="btn btn-danger" onclick="return confirm('Aktuelle Zuordnung wirklich entfernen?')">🗑️ Zuordnung entfernen</button>
+    </form>
 </div>
 
 {% if inv %}
@@ -119,6 +167,46 @@
                 {% endif %}
             </td>
         </tr>
+    </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if split_invoices %}
+<h2>Aufgeteilte Rechnungen</h2>
+<div class="table-responsive">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Rechnungs-Nr.</th>
+            <th>Name</th>
+            <th>Zugeordneter Anteil</th>
+            <th>Betrag (Brutto)</th>
+            <th>Status</th>
+            <th>Mahnung</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for split in split_invoices %}
+        <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=split.invoice_id) }}'">
+            <td class="cell-id">{{ split.invoice_id }}</td>
+            <td>{{ split.invoice_name or "—" }}</td>
+            <td class="cell-amount">{{ split.amount_eur | format_eur }}</td>
+            <td class="cell-amount">{{ split.invoice_amount_gross | format_eur }}</td>
+            <td>
+                <span class="status-badge status-{{ split.invoice_status | lower | replace('/', '-') | replace(' ', '-') if split.invoice_status else 'offen' }}">
+                    {{ split.invoice_status or "Offen" }}
+                </span>
+            </td>
+            <td>
+                {% if split.invoice_reminder_status %}
+                <span class="mahnung-badge">{{ split.invoice_reminder_status }}</span>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
     </tbody>
 </table>
 </div>
