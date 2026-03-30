@@ -103,7 +103,9 @@ def rechnungen():
     page = max(1, int(request.args.get("page", 1)))
     sort_col = request.args.get("sort", "invoice_id")
     order = request.args.get("order", "desc").lower()
-    per_page = 50
+    per_page = int(request.args.get("per_page", 50))
+    if per_page not in [20, 50, 100, 200, 500]:
+        per_page = 50
 
     # Validate sorting
     valid_cols = ["invoice_id", "name", "amount_gross", "paid_sum_eur", "deviation_eur", "status", "reminder_status"]
@@ -141,7 +143,7 @@ def rechnungen():
     return render_template("rechnungen.html", invoices=invoices, page=page,
                            total_pages=total_pages, total=total,
                            status_filter=status_filter, search=search,
-                           sort_col=sort_col, order=order)
+                           sort_col=sort_col, order=order, per_page=per_page)
 
 
 @app.route("/rechnungen/<int:invoice_id>")
@@ -170,11 +172,14 @@ def rechnung_detail(invoice_id):
 def zahlungen():
     conn = get_db()
     filter_type = request.args.get("filter", "")
+    show_type = request.args.get("show", "income") # income (default) or all
     search = request.args.get("q", "").strip()
     page = max(1, int(request.args.get("page", 1)))
     sort_col = request.args.get("sort", "payment_id")
     order = request.args.get("order", "desc").lower()
-    per_page = 50
+    per_page = int(request.args.get("per_page", 50))
+    if per_page not in [20, 50, 100, 200, 500]:
+        per_page = 50
 
     valid_cols = ["payment_id", "source", "booking_date", "amount_eur", "beneficiary_name", "reference_text", "match_score", "invoice_id", "matched"]
     if sort_col not in valid_cols:
@@ -184,6 +189,11 @@ def zahlungen():
 
     query = "SELECT * FROM payments WHERE 1=1"
     params = []
+    
+    # New Income/All Filter
+    if show_type == "income":
+        query += " AND amount_eur > 0"
+    
     if filter_type == "matched":
         query += " AND matched = 1"
     elif filter_type == "unmatched":
@@ -200,6 +210,10 @@ def zahlungen():
 
     count_query = "SELECT COUNT(*) FROM payments WHERE 1=1"
     count_params = []
+    
+    if show_type == "income":
+        count_query += " AND amount_eur > 0"
+        
     if filter_type == "matched":
         count_query += " AND matched = 1"
     elif filter_type == "unmatched":
@@ -215,8 +229,8 @@ def zahlungen():
     total_pages = max(1, (total + per_page - 1) // per_page)
     return render_template("zahlungen.html", payments=payments, page=page,
                            total_pages=total_pages, total=total,
-                           filter_type=filter_type, search=search,
-                           sort_col=sort_col, order=order)
+                           filter_type=filter_type, show_type=show_type, search=search,
+                           sort_col=sort_col, order=order, per_page=per_page)
 
 
 @app.route("/zahlungen/<int:payment_id>")
