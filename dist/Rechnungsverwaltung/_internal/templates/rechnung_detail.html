@@ -25,6 +25,9 @@
 
             <dt>Fälligkeitsdatum</dt>
             <dd>{{ inv.due_date | format_date if inv.due_date else "—" }}</dd>
+
+            <dt>Bemerkung</dt>
+            <dd>{{ inv.remark if inv.remark else "—" }}</dd>
         </dl>
     </div>
 
@@ -37,6 +40,9 @@
                     {{ inv.status or "Offen" }}
                 </span>
             </dd>
+
+            <dt>Statusmodus</dt>
+            <dd>{{ "Manuell" if inv.status_manual else "Automatisch" }}</dd>
 
             <dt>Bezahlt</dt>
             <dd class="cell-amount">{{ inv.paid_sum_eur | format_eur }}</dd>
@@ -54,13 +60,91 @@
             <dd>
                 {% if inv.reminder_status %}
                 <span class="mahnung-badge">{{ inv.reminder_status }}</span>
-                ({{ inv.reminder_date | format_date }})
                 {% else %}
                 Keine
                 {% endif %}
             </dd>
+
+            <dt>Mahnungsdatum</dt>
+            <dd>{{ inv.reminder_date | format_date if inv.reminder_date else "—" }}</dd>
+
+            <dt>Mahnmodus</dt>
+            <dd>{{ "Manuell" if inv.reminder_manual else "Automatisch" }}</dd>
         </dl>
     </div>
+</div>
+
+<div class="card">
+    <h2>Status der Rechnung manuell setzen</h2>
+    <p class="page-desc" style="margin-bottom: 14px;">
+        Manuell gesetzte Rechnungs-Status bleiben bei "Matching starten" und "Status aktualisieren" erhalten.
+    </p>
+    <form method="POST" action="{{ url_for('rechnung_update_status', invoice_id=inv.invoice_id) }}" class="inline-form">
+        <div class="form-group">
+            <label for="invoice_manual_status">Status</label>
+            <select id="invoice_manual_status" name="status" class="form-input">
+                <option value="Offen" {{ 'selected' if inv.status == 'Offen' }}>Offen</option>
+                <option value="Bezahlt" {{ 'selected' if inv.status == 'Bezahlt' }}>Bezahlt</option>
+                <option value="Bezahlt mit Mahngebühr" {{ 'selected' if inv.status == 'Bezahlt mit Mahngebühr' }}>Bezahlt mit Mahngebühr</option>
+                <option value="Teiloffen/Unterzahlung" {{ 'selected' if inv.status == 'Teiloffen/Unterzahlung' }}>Teiloffen/Unterzahlung</option>
+                <option value="Überzahlung" {{ 'selected' if inv.status == 'Überzahlung' }}>Überzahlung</option>
+                <option value="Akonto" {{ 'selected' if inv.status == 'Akonto' }}>Akonto</option>
+                <option value="Schadensrechnungen" {{ 'selected' if inv.status == 'Schadensrechnungen' }}>Schadensrechnungen</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Status speichern</button>
+    </form>
+    <form method="POST" action="{{ url_for('rechnung_reset_status_auto', invoice_id=inv.invoice_id) }}" style="margin-top: 12px;">
+        <button type="submit" class="btn btn-secondary">↺ Status-Automatik aktivieren</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Bemerkung zur Rechnung</h2>
+    <form method="POST" action="{{ url_for('rechnung_update_bemerkung', invoice_id=inv.invoice_id) }}">
+        <div class="form-group" style="min-width: 100%;">
+            <label for="invoice_remark">Bemerkung</label>
+            <textarea
+                id="invoice_remark"
+                name="remark"
+                class="form-input"
+                rows="4"
+                placeholder="Optionaler Hinweis zur Rechnung…"
+            >{{ inv.remark or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Bemerkung speichern</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Mahnung manuell setzen</h2>
+    <p class="page-desc" style="margin-bottom: 14px;">
+        Manuelle Mahnung überschreibt den automatischen Mahnlauf für diese Rechnung.
+    </p>
+    <form method="POST" action="{{ url_for('rechnung_update_mahnung', invoice_id=inv.invoice_id) }}" class="inline-form">
+        <div class="form-group">
+            <label for="reminder_status">Mahnungsstatus</label>
+            <select id="reminder_status" name="reminder_status" class="form-input">
+                <option value="" {{ 'selected' if not inv.reminder_status }}>Keine Mahnung</option>
+                <option value="1. Mahnung" {{ 'selected' if inv.reminder_status == '1. Mahnung' }}>1. Mahnung</option>
+                <option value="2. Mahnung" {{ 'selected' if inv.reminder_status == '2. Mahnung' }}>2. Mahnung</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="reminder_date">Mahnungsdatum</label>
+            <input
+                id="reminder_date"
+                type="date"
+                name="reminder_date"
+                class="form-input"
+                value="{{ inv.reminder_date or '' }}"
+            >
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Mahnung speichern</button>
+    </form>
+    <form method="POST" action="{{ url_for('rechnung_reset_mahnung_auto', invoice_id=inv.invoice_id) }}" style="margin-top: 12px;">
+        <button type="submit" class="btn btn-secondary">↺ Automatik wieder aktivieren</button>
+    </form>
 </div>
 
 {% if payments %}
@@ -76,6 +160,7 @@
             <th>Absender</th>
             <th>Verwendungszweck</th>
             <th>Score</th>
+            <th>Bemerkung Zahlung</th>
         </tr>
     </thead>
     <tbody>
@@ -89,6 +174,7 @@
             <td>{{ p.beneficiary_name or "—" }}</td>
             <td class="cell-ref">{{ p.reference_text[:80] if p.reference_text else "—" }}{{ "…" if p.reference_text and p.reference_text|length > 80 }}</td>
             <td>{{ "%.0f%%"|format(p.match_score * 100) if p.match_score else "—" }}</td>
+            <td class="cell-note" title="{{ p.remark or '' }}">{{ p.remark[:80] if p.remark else "—" }}{{ "…" if p.remark and p.remark|length > 80 }}</td>
         </tr>
         {% endfor %}
     </tbody>

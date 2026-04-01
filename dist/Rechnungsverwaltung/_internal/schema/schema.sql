@@ -8,10 +8,12 @@ CREATE TABLE IF NOT EXISTS parameters (
 CREATE TABLE IF NOT EXISTS invoices (
   invoice_id INTEGER PRIMARY KEY,
   name TEXT,
+  remark TEXT,
   amount_gross REAL,
   issue_date TEXT,
   due_date TEXT,
   status TEXT,
+  status_manual INTEGER DEFAULT 0,
   deviation_eur REAL,
   paid_sum_eur REAL DEFAULT 0,
   last_payment_date TEXT,
@@ -19,6 +21,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   action TEXT,
   reminder_status TEXT,
   reminder_date TEXT,
+  reminder_manual INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -34,8 +37,12 @@ CREATE TABLE IF NOT EXISTS payments (
   reference_text TEXT,
   iban TEXT,
   beneficiary_name TEXT,
+  remark TEXT,
   matched INTEGER DEFAULT 0,
   akonto INTEGER DEFAULT 0,
+  schadensrechnung INTEGER DEFAULT 0,
+  status_manual INTEGER DEFAULT 0,
+  status_override TEXT,
   match_score REAL,
   match_rule TEXT,
   created_by TEXT,

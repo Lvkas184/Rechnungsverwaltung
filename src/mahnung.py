@@ -1,7 +1,9 @@
 """Mahnlogik für offene Rechnungen basierend auf issue_date.
 
-Sets reminder_status to '1. Mahnung' or '2. Mahnung' depending on
-how many days have passed since issue_date vs. the configured thresholds.
+Setzt reminder_status auf '1. Mahnung' oder '2. Mahnung' abhängig
+von den konfigurierten Fristen.
+
+Rechnungen mit `reminder_manual = 1` werden nicht automatisch geändert.
 """
 
 import json
@@ -35,7 +37,10 @@ def run_mahnung():
         except (ValueError, TypeError):
             continue
 
-        if inv["status"] == "Bezahlt":
+        if inv["status"] in ("Bezahlt", "Bezahlt mit Mahngebühr"):
+            continue
+
+        if int(inv["reminder_manual"] or 0) == 1:
             continue
 
         days = (today - issue).days

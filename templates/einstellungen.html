@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<h1>⚙️ Einstellungen</h1>
+
+<div class="card">
+    <h2>Allgemein</h2>
+    <p class="page-desc">
+        Diese Werte steuern die automatische Statusberechnung.
+    </p>
+
+    <form method="POST" action="{{ url_for('einstellungen') }}" class="inline-form">
+        <div class="form-group">
+            <label for="mahngebuehr_eur">Höhe Mahngebühr (EUR)</label>
+            <input
+                type="text"
+                name="mahngebuehr_eur"
+                id="mahngebuehr_eur"
+                class="form-input"
+                inputmode="decimal"
+                placeholder="z.B. 7,50"
+                value="{{ params.mahngebuehr_eur | format_eur if params.mahngebuehr_eur is not none else '0,00 €' }}"
+                required
+            >
+            <small class="text-muted">
+                Überzahlungen mit exakt dieser Abweichung erhalten den Status
+                „Bezahlt mit Mahngebühr“ und werden wie „Bezahlt“ behandelt.
+            </small>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Einstellungen speichern</button>
+    </form>
+</div>
+{% endblock %}

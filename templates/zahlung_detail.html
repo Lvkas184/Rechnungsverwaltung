@@ -2,6 +2,7 @@
 {% block title %}Zahlung {{ pay.payment_id }} — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
+{% set eff_status = payment_effective_status(pay) %}
 <div class="detail-header">
     <a href="{{ url_for('zahlungen') }}" class="btn btn-secondary">← Zurück</a>
     <h1>Zahlung #{{ pay.payment_id }}</h1>
@@ -31,6 +32,9 @@
             
             <dt>IBAN</dt>
             <dd style="font-family: monospace;">{{ pay.iban or "—" }}</dd>
+
+            <dt>Bemerkung Zahlung</dt>
+            <dd>{{ pay.remark if pay.remark else "—" }}</dd>
         </dl>
     </div>
 
@@ -61,14 +65,19 @@
             <br>
             <dt>Status</dt>
             <dd>
-                {% if pay.matched == 1 %}
+                {% if eff_status == 'Zugeordnet' %}
                 <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
-                {% elif pay.akonto == 1 %}
+                {% elif eff_status == 'Akonto' %}
                 <span class="status-badge status-akonto">🟠 Akonto (ohne Matching)</span>
+                {% elif eff_status == 'Schadensrechnungen' %}
+                <span class="status-badge status-schadensrechnungen">🟣 Schadensrechnungen (ohne Matching)</span>
                 {% else %}
                 <span class="status-badge status-offen">Offen (Nicht zugeordnet)</span>
                 {% endif %}
             </dd>
+
+            <dt>Statusmodus</dt>
+            <dd>{{ "Manuell" if pay.status_manual else "Automatisch" }}</dd>
 
             {% if parent_payment %}
             <dt>Sammelzahlung</dt>
@@ -106,6 +115,45 @@
             <dd><span class="badge">{{ pay.match_rule or "—" }}</span></dd>
         </dl>
     </div>
+</div>
+
+<div class="card">
+    <h2>Bemerkung zur Zahlung</h2>
+    <form method="POST" action="{{ url_for('zahlung_update_bemerkung', payment_id=pay.payment_id) }}">
+        <div class="form-group" style="min-width: 100%;">
+            <label for="payment_remark">Bemerkung</label>
+            <textarea
+                id="payment_remark"
+                name="remark"
+                class="form-input"
+                rows="3"
+                placeholder="Optionaler Hinweis zur Zahlung…"
+            >{{ pay.remark or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Bemerkung speichern</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Status der Zahlung manuell setzen</h2>
+    <p class="page-desc">
+        Manuell gesetzte Zahlungs-Status bleiben bei "Matching starten" und "Status aktualisieren" erhalten.
+    </p>
+    <form method="POST" action="{{ url_for('zahlung_update_status', payment_id=pay.payment_id) }}" class="inline-form" style="margin-bottom: 12px;">
+        <div class="form-group">
+            <label for="payment_manual_status">Status</label>
+            <select id="payment_manual_status" name="status" class="form-input">
+                <option value="Offen" {{ 'selected' if eff_status == 'Offen' }}>Offen (Nicht zugeordnet)</option>
+                <option value="Zugeordnet" {{ 'selected' if eff_status == 'Zugeordnet' }}>Zugeordnet</option>
+                <option value="Akonto" {{ 'selected' if eff_status == 'Akonto' }}>Akonto</option>
+                <option value="Schadensrechnungen" {{ 'selected' if eff_status == 'Schadensrechnungen' }}>Schadensrechnungen</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Status speichern</button>
+    </form>
+    <form method="POST" action="{{ url_for('zahlung_reset_status_auto', payment_id=pay.payment_id) }}">
+        <button type="submit" class="btn btn-secondary">↺ Status-Automatik aktivieren</button>
+    </form>
 </div>
 
 <div class="card">
@@ -147,6 +195,7 @@
             <th>Betrag (Brutto)</th>
             <th>Status</th>
             <th>Mahnung</th>
+            <th>Bemerkung</th>
         </tr>
     </thead>
     <tbody>
@@ -166,6 +215,7 @@
                 —
                 {% endif %}
             </td>
+            <td class="cell-note" title="{{ inv.remark or '' }}">{{ inv.remark[:80] if inv.remark else "—" }}{{ "…" if inv.remark and inv.remark|length > 80 }}</td>
         </tr>
     </tbody>
 </table>
@@ -184,6 +234,7 @@
             <th>Betrag (Brutto)</th>
             <th>Status</th>
             <th>Mahnung</th>
+            <th>Bemerkung</th>
         </tr>
     </thead>
     <tbody>
@@ -205,6 +256,7 @@
                 —
                 {% endif %}
             </td>
+            <td class="cell-note" title="{{ split.invoice_remark or '' }}">{{ split.invoice_remark[:80] if split.invoice_remark else "—" }}{{ "…" if split.invoice_remark and split.invoice_remark|length > 80 }}</td>
         </tr>
         {% endfor %}
     </tbody>

@@ -19,8 +19,8 @@ except Exception:  # pragma: no cover — rapidfuzz is optional
     fuzz = None
 
 from src.db import PARAM_PATH, get_db, init_db
-from src.invoice_rules import is_akonto_invoice_id
-from src.payment_rules import is_akonto_payment
+from src.invoice_rules import classify_special_invoice_status
+from src.payment_rules import classify_special_payment_status
 
 
 # ---------------------------------------------------------------------------
@@ -32,11 +32,26 @@ def load_params(path=PARAM_PATH):
         return json.load(f)
 
 
+def _parse_float_param(value, default):
+    try:
+        if value is None:
+            return float(default)
+        if isinstance(value, str):
+            cleaned = value.strip().replace("€", "").replace(" ", "").replace(",", ".")
+            if cleaned == "":
+                return float(default)
+            return float(cleaned)
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 PARAMS = load_params()
-TOLERANCE = float(PARAMS.get("Toleranz", 0.001))
-AUTO_THRESHOLD = float(PARAMS.get("match_score_auto", 0.85))
-REVIEW_THRESHOLD = float(PARAMS.get("match_score_review", 0.6))
-SPLIT_THRESHOLD = float(PARAMS.get("split_threshold", 0.01))
+TOLERANCE = _parse_float_param(PARAMS.get("Toleranz", 0.001), 0.001)
+AUTO_THRESHOLD = _parse_float_param(PARAMS.get("match_score_auto", 0.85), 0.85)
+REVIEW_THRESHOLD = _parse_float_param(PARAMS.get("match_score_review", 0.6), 0.6)
+SPLIT_THRESHOLD = _parse_float_param(PARAMS.get("split_threshold", 0.01), 0.01)
+MAHNGEBUEHR_EUR = max(0.0, _parse_float_param(PARAMS.get("mahngebuehr_eur", 0.0), 0.0))
 
 
 # ---------------------------------------------------------------------------
@@ -66,8 +81,8 @@ def _is_plausible_invoice_number(raw):
     """Keep only 6-digit invoice IDs with plausible year prefix (20..currentYY)."""
     if not raw or not re.fullmatch(r"\d{6}", str(raw)):
         return False
-    if str(raw).startswith("9"):
-        # Abschlagsrechnungen / Akonto
+    if str(raw).startswith(("8", "9")):
+        # Sonderfälle: Schadensrechnungen/Akonto
         return True
     yy = int(str(raw)[:2])
     current_yy = datetime.now().year % 100
@@ -179,14 +194,14 @@ def find_candidates_by_amount(conn, amount, pct=0.05, limit=200):
     """Return open invoices whose amount_gross is within ±pct of *amount*."""
     if amount is None:
         return conn.execute(
-            "SELECT * FROM invoices WHERE COALESCE(status, 'Offen') != 'Bezahlt' LIMIT ?",
+            "SELECT * FROM invoices WHERE COALESCE(status, 'Offen') NOT IN ('Bezahlt', 'Bezahlt mit Mahngebühr') LIMIT ?",
             (limit,),
         ).fetchall()
     low = amount * (1 - pct)
     high = amount * (1 + pct)
     return conn.execute(
         """SELECT * FROM invoices
-           WHERE (COALESCE(status, 'Offen') != 'Bezahlt')
+           WHERE (COALESCE(status, 'Offen') NOT IN ('Bezahlt', 'Bezahlt mit Mahngebühr'))
              AND amount_gross BETWEEN ? AND ?
            LIMIT ?""",
         (low, high, limit),
@@ -218,12 +233,15 @@ def _compute_invoice_status(invoice_id, amount_gross, paid_sum):
     amount = float(amount_gross or 0)
     paid = float(paid_sum or 0)
     deviation = paid - amount
-    if is_akonto_invoice_id(invoice_id):
-        status = "Akonto"
+    special_status = classify_special_invoice_status(invoice_id)
+    if special_status:
+        status = special_status
     elif paid == 0:
         status = "Offen"
     elif abs(deviation) <= TOLERANCE:
         status = "Bezahlt"
+    elif deviation > TOLERANCE and MAHNGEBUEHR_EUR > 0 and abs(deviation - MAHNGEBUEHR_EUR) <= TOLERANCE:
+        status = "Bezahlt mit Mahngebühr"
     elif deviation > TOLERANCE:
         status = "Überzahlung"
     else:
@@ -257,17 +275,25 @@ def _rebuild_invoice_aggregates_and_status(conn):
         """
     )
 
-    rows = conn.execute("SELECT invoice_id, amount_gross, paid_sum_eur FROM invoices").fetchall()
+    rows = conn.execute(
+        "SELECT invoice_id, amount_gross, paid_sum_eur, COALESCE(status_manual, 0) AS status_manual FROM invoices"
+    ).fetchall()
     for inv in rows:
         status, deviation = _compute_invoice_status(
             inv["invoice_id"],
             inv["amount_gross"],
             inv["paid_sum_eur"],
         )
-        conn.execute(
-            "UPDATE invoices SET status = ?, deviation_eur = ? WHERE invoice_id = ?",
-            (status, deviation, inv["invoice_id"]),
-        )
+        if int(inv["status_manual"] or 0) == 1:
+            conn.execute(
+                "UPDATE invoices SET deviation_eur = ? WHERE invoice_id = ?",
+                (deviation, inv["invoice_id"]),
+            )
+        else:
+            conn.execute(
+                "UPDATE invoices SET status = ?, deviation_eur = ? WHERE invoice_id = ?",
+                (status, deviation, inv["invoice_id"]),
+            )
 
 
 def _cleanup_legacy_collective_splits(conn):
@@ -369,8 +395,14 @@ def match_payment_row(conn, payment):
     Returns a dict with keys: invoice_id, score, rule, and optionally split.
     """
     ref = payment["reference_text"]
-    if is_akonto_payment(ref, payment["invoice_id"] if "invoice_id" in payment.keys() else None):
+    special_payment_status = classify_special_payment_status(
+        ref,
+        payment["invoice_id"] if "invoice_id" in payment.keys() else None,
+    )
+    if special_payment_status == "Akonto":
         return {"invoice_id": None, "score": 0.0, "rule": "akonto_excluded"}
+    if special_payment_status == "Schadensrechnungen":
+        return {"invoice_id": None, "score": 0.0, "rule": "schadensrechnung_excluded"}
 
     split_invoice_ids = extract_explicit_multi_invoice_numbers(ref)
     referenced_invoice_ids = extract_invoice_numbers(ref)
@@ -467,6 +499,14 @@ def _rollback_existing_single_assignment(conn, payment):
 
 def apply_matching(auto_commit=True):
     """Match all unmatched payments and update DB accordingly."""
+    global TOLERANCE, AUTO_THRESHOLD, REVIEW_THRESHOLD, SPLIT_THRESHOLD, MAHNGEBUEHR_EUR
+    params = load_params()
+    TOLERANCE = _parse_float_param(params.get("Toleranz", 0.001), 0.001)
+    AUTO_THRESHOLD = _parse_float_param(params.get("match_score_auto", 0.85), 0.85)
+    REVIEW_THRESHOLD = _parse_float_param(params.get("match_score_review", 0.6), 0.6)
+    SPLIT_THRESHOLD = _parse_float_param(params.get("split_threshold", 0.01), 0.01)
+    MAHNGEBUEHR_EUR = max(0.0, _parse_float_param(params.get("mahngebuehr_eur", 0.0), 0.0))
+
     conn = load_db()
     cleaned_parents, cleaned_children = _cleanup_legacy_collective_splits(conn)
     if cleaned_parents:
@@ -479,7 +519,9 @@ def apply_matching(auto_commit=True):
         """SELECT * FROM payments
            WHERE parent_payment_id IS NULL
              AND COALESCE(created_by, '') != 'manual'
+             AND COALESCE(status_manual, 0) = 0
              AND COALESCE(akonto, 0) = 0
+             AND COALESCE(schadensrechnung, 0) = 0
              AND (
                COALESCE(matched, 0) = 0
                OR (

@@ -20,6 +20,7 @@
                 <a href="{{ url_for('zahlungen') }}" class="nav-link {% if request.endpoint == 'zahlungen' %}active{% endif %}">💳 Zahlungen</a>
                 <a href="{{ url_for('upload') }}" class="nav-link {% if request.endpoint == 'upload' %}active{% endif %}">📤 Import</a>
                 <a href="{{ url_for('zuordnungen') }}" class="nav-link {% if request.endpoint == 'zuordnungen' %}active{% endif %}">🔗 Zuordnungen</a>
+                <a href="{{ url_for('einstellungen') }}" class="nav-link {% if request.endpoint == 'einstellungen' %}active{% endif %}">⚙️ Einstellungen</a>
                 <form action="{{ url_for('shutdown') }}" method="POST" style="display:inline; margin-left: 10px;">
                     <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Möchten Sie das Programm wirklich beenden?')">🛑 Beenden</button>
                 </form>

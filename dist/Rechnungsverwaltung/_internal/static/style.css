@@ -61,9 +61,10 @@ body {
 }
 
 .nav-inner {
-    max-width: 1400px;
+    width: 100%;
+    max-width: none;
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 0 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -112,9 +113,10 @@ body {
    ============================================================ */
 
 .main-content {
-    max-width: 1400px;
+    width: 100%;
+    max-width: none;
     margin: 0 auto;
-    padding: 32px 24px;
+    padding: 24px 12px;
     min-height: calc(100vh - 160px);
 }
 
@@ -432,9 +434,40 @@ h2 {
 .cell-ref {
     font-size: 0.85rem;
     color: var(--color-text-secondary);
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cell-note {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+/* ============================================================
+   Table Layout Tuning (Rechnungen / Zahlungen)
+   ============================================================ */
+
+.rechnungen-table,
+.zahlungen-table {
+    table-layout: auto;
+}
+
+.rechnungen-table th,
+.rechnungen-table td,
+.zahlungen-table th,
+.zahlungen-table td {
+    white-space: nowrap;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+.zahlungen-table .cell-sender {
+    white-space: nowrap;
+}
+
+.rechnungen-table .cell-note,
+.zahlungen-table .cell-note {
+    white-space: nowrap;
 }
 
 /* ============================================================
@@ -460,6 +493,11 @@ h2 {
     color: #059669;
 }
 
+.status-bezahlt-mit-mahngebühr {
+    background: #dcfce7;
+    color: #15803d;
+}
+
 .status-teiloffen-unterzahlung {
     background: #fef3c7;
     color: #d97706;
@@ -473,6 +511,11 @@ h2 {
 .status-akonto {
     background: #fff7ed;
     color: #c2410c;
+}
+
+.status-schadensrechnungen {
+    background: #ede9fe;
+    color: #6d28d9;
 }
 
 .mahnung-badge {
@@ -747,6 +790,13 @@ h2 {
 .form-input:focus {
     outline: none;
     border-color: var(--color-primary);
+}
+
+.text-muted {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
 }
 
 /* ============================================================

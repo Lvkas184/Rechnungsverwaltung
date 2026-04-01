@@ -1,11 +1,12 @@
 """Flask Web-App für Rechnungsverwaltung."""
 
+import json
 import os
 import re
 import sqlite3
 from datetime import datetime
 
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import Flask, flash, redirect, render_template, request, session, url_for
 
 from src.csv_import import (
     import_datev_rechnungen,
@@ -13,7 +14,7 @@ from src.csv_import import (
     import_voba_kraichgau_csv,
     import_voba_pur_csv,
 )
-from src.db import DB_PATH, get_db, init_db
+from src.db import DB_PATH, PARAM_PATH, get_db, init_db
 from src.mahnung import run_mahnung
 from src.matching import apply_matching
 from src.status import update_all
@@ -26,6 +27,31 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 SPLIT_LINE_RE = re.compile(r"^\s*(\d{4,12})\s*[:=,;]\s*([-+]?\d+(?:[.,]\d{1,2})?)\s*$")
+DEFAULT_PARAMS = {
+    "Toleranz": 0.001,
+    "due_days_1": 30,
+    "due_days_2": 60,
+    "split_threshold": 0.01,
+    "match_score_auto": 0.85,
+    "match_score_review": 0.6,
+    "mahngebuehr_eur": 0.0,
+    "date_origin": "1899-12-30",
+}
+MANUAL_INVOICE_STATUSES = {
+    "Offen",
+    "Bezahlt",
+    "Bezahlt mit Mahngebühr",
+    "Teiloffen/Unterzahlung",
+    "Überzahlung",
+    "Akonto",
+    "Schadensrechnungen",
+}
+MANUAL_PAYMENT_STATUSES = {
+    "Offen",
+    "Zugeordnet",
+    "Akonto",
+    "Schadensrechnungen",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +102,62 @@ def _parse_eur(value):
         s = s.replace(".", "").replace(",", ".")
     amount = float(s)
     return round(amount, 2)
+
+
+def _load_app_params():
+    params = dict(DEFAULT_PARAMS)
+    try:
+        with open(PARAM_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                params.update(data)
+    except Exception:
+        pass
+    return params
+
+
+def _save_app_params(params):
+    with open(PARAM_PATH, "w", encoding="utf-8") as f:
+        json.dump(params, f, ensure_ascii=False, indent=2)
+
+
+def _payment_effective_status_sql(alias="payments"):
+    """SQL CASE expression for effective payment status (manual override aware)."""
+    return f"""
+        CASE
+            WHEN COALESCE({alias}.status_manual, 0) = 1
+                 AND COALESCE({alias}.status_override, '') <> ''
+            THEN {alias}.status_override
+            WHEN COALESCE({alias}.matched, 0) = 1 THEN 'Zugeordnet'
+            WHEN COALESCE({alias}.akonto, 0) = 1 THEN 'Akonto'
+            WHEN COALESCE({alias}.schadensrechnung, 0) = 1 THEN 'Schadensrechnungen'
+            ELSE 'Offen'
+        END
+    """
+
+
+def payment_effective_status(payment):
+    """Return effective status label for a payment row/dict."""
+    status_manual = int((payment["status_manual"] if "status_manual" in payment.keys() else 0) or 0)
+    if status_manual == 1:
+        override = str((payment["status_override"] if "status_override" in payment.keys() else "") or "").strip()
+        if override in MANUAL_PAYMENT_STATUSES:
+            return override
+
+    if int((payment["matched"] if "matched" in payment.keys() else 0) or 0) == 1:
+        return "Zugeordnet"
+    if int((payment["akonto"] if "akonto" in payment.keys() else 0) or 0) == 1:
+        return "Akonto"
+    if int((payment["schadensrechnung"] if "schadensrechnung" in payment.keys() else 0) or 0) == 1:
+        return "Schadensrechnungen"
+    return "Offen"
+
+
+@app.context_processor
+def _inject_template_helpers():
+    return {
+        "payment_effective_status": payment_effective_status,
+    }
 
 
 def _parse_manual_split_allocations(raw_text):
@@ -151,18 +233,33 @@ def _reset_payment_assignment(conn, parent_payment_id):
 @app.route("/")
 def dashboard():
     conn = get_db()
+    payment_status_expr = _payment_effective_status_sql("p")
     stats = {
         "total_invoices": conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0],
         "open_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE COALESCE(status, 'Offen') = 'Offen'").fetchone()[0],
         "partial_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE status = 'Teiloffen/Unterzahlung'").fetchone()[0],
-        "paid_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE status = 'Bezahlt'").fetchone()[0],
+        "paid_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE status IN ('Bezahlt', 'Bezahlt mit Mahngebühr')").fetchone()[0],
         "overpaid_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE status = 'Überzahlung'").fetchone()[0],
         "total_payments": conn.execute("SELECT COUNT(*) FROM payments").fetchone()[0],
-        "matched_payments": conn.execute("SELECT COUNT(*) FROM payments WHERE matched = 1").fetchone()[0],
-        "unmatched_payments": conn.execute("SELECT COUNT(*) FROM payments WHERE COALESCE(matched, 0) = 0").fetchone()[0],
+        "matched_payments": conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM payments p
+            WHERE p.parent_payment_id IS NULL
+              AND ({payment_status_expr}) IN ('Zugeordnet', 'Akonto', 'Schadensrechnungen')
+            """
+        ).fetchone()[0],
+        "unmatched_payments": conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM payments p
+            WHERE p.parent_payment_id IS NULL
+              AND ({payment_status_expr}) = 'Offen'
+            """
+        ).fetchone()[0],
         "mahnung_1": conn.execute("SELECT COUNT(*) FROM invoices WHERE reminder_status = '1. Mahnung'").fetchone()[0],
         "mahnung_2": conn.execute("SELECT COUNT(*) FROM invoices WHERE reminder_status = '2. Mahnung'").fetchone()[0],
-        "open_sum": conn.execute("SELECT COALESCE(SUM(amount_gross - COALESCE(paid_sum_eur, 0)), 0) FROM invoices WHERE COALESCE(status, 'Offen') != 'Bezahlt'").fetchone()[0],
+        "open_sum": conn.execute("SELECT COALESCE(SUM(amount_gross - COALESCE(paid_sum_eur, 0)), 0) FROM invoices WHERE COALESCE(status, 'Offen') NOT IN ('Bezahlt', 'Bezahlt mit Mahngebühr')").fetchone()[0],
     }
     # Recent audit entries
     recent_audit = conn.execute(
@@ -173,27 +270,75 @@ def dashboard():
 
 
 # ---------------------------------------------------------------------------
+# Einstellungen (Settings)
+# ---------------------------------------------------------------------------
+
+@app.route("/einstellungen", methods=["GET", "POST"])
+def einstellungen():
+    params = _load_app_params()
+    if request.method == "POST":
+        raw_mahngebuehr = request.form.get("mahngebuehr_eur", "").strip()
+        try:
+            mahngebuehr = _parse_eur(raw_mahngebuehr or "0")
+        except ValueError:
+            flash("Mahngebühr muss ein gültiger Eurobetrag sein (z.B. 7,50).", "error")
+            return redirect(url_for("einstellungen"))
+
+        if mahngebuehr < 0:
+            flash("Mahngebühr darf nicht negativ sein.", "error")
+            return redirect(url_for("einstellungen"))
+
+        params["mahngebuehr_eur"] = round(mahngebuehr, 2)
+        try:
+            _save_app_params(params)
+            update_all()
+            flash("✅ Einstellungen gespeichert. Status wurde neu berechnet.", "success")
+        except Exception as e:
+            flash(f"Fehler beim Speichern der Einstellungen: {e}", "error")
+        return redirect(url_for("einstellungen"))
+
+    return render_template("einstellungen.html", params=params)
+
+
+# ---------------------------------------------------------------------------
 # Rechnungen (Invoices)
 # ---------------------------------------------------------------------------
 
 @app.route("/rechnungen")
 def rechnungen():
     conn = get_db()
+    # Persist sorting preference across navigation/tab changes.
+    saved_sort_col = session.get("rechnungen_sort_col", "invoice_id")
+    saved_order = session.get("rechnungen_order", "asc")
+
     status_filter = request.args.get("status", "")
     search = request.args.get("q", "").strip()
     page = max(1, int(request.args.get("page", 1)))
-    sort_col = request.args.get("sort", "invoice_id")
-    order = request.args.get("order", "desc").lower()
+    sort_col = request.args.get("sort", saved_sort_col)
+    order = request.args.get("order", saved_order).lower()
     per_page = int(request.args.get("per_page", 50))
     if per_page not in [20, 50, 100, 200, 500]:
         per_page = 50
 
     # Validate sorting
-    valid_cols = ["invoice_id", "name", "amount_gross", "paid_sum_eur", "deviation_eur", "status", "reminder_status"]
+    valid_cols = [
+        "invoice_id",
+        "name",
+        "remark",
+        "amount_gross",
+        "paid_sum_eur",
+        "deviation_eur",
+        "status",
+        "reminder_status",
+        "reminder_date",
+    ]
     if sort_col not in valid_cols:
         sort_col = "invoice_id"
     if order not in ["asc", "desc"]:
-        order = "desc"
+        order = "asc"
+
+    session["rechnungen_sort_col"] = sort_col
+    session["rechnungen_order"] = order
 
     query = "SELECT * FROM invoices WHERE 1=1"
     params = []
@@ -201,8 +346,8 @@ def rechnungen():
         query += " AND status = ?"
         params.append(status_filter)
     if search:
-        query += " AND (CAST(invoice_id AS TEXT) LIKE ? OR name LIKE ?)"
-        params.extend([f"%{search}%", f"%{search}%"])
+        query += " AND (CAST(invoice_id AS TEXT) LIKE ? OR name LIKE ? OR COALESCE(remark, '') LIKE ?)"
+        params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
     query += f" ORDER BY {sort_col} {order.upper()} LIMIT ? OFFSET ?"
     params.extend([per_page, (page - 1) * per_page])
 
@@ -215,8 +360,8 @@ def rechnungen():
         count_query += " AND status = ?"
         count_params.append(status_filter)
     if search:
-        count_query += " AND (CAST(invoice_id AS TEXT) LIKE ? OR name LIKE ?)"
-        count_params.extend([f"%{search}%", f"%{search}%"])
+        count_query += " AND (CAST(invoice_id AS TEXT) LIKE ? OR name LIKE ? OR COALESCE(remark, '') LIKE ?)"
+        count_params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
     total = conn.execute(count_query, count_params).fetchone()[0]
     conn.close()
 
@@ -245,6 +390,215 @@ def rechnung_detail(invoice_id):
     return render_template("rechnung_detail.html", inv=inv, payments=payments, audit=audit)
 
 
+@app.route("/rechnungen/<int:invoice_id>/bemerkung", methods=["POST"])
+def rechnung_update_bemerkung(invoice_id):
+    raw_remark = request.form.get("remark", "")
+    remark = str(raw_remark or "").strip()
+    if len(remark) > 2000:
+        flash("Bemerkung ist zu lang (max. 2000 Zeichen).", "error")
+        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT invoice_id FROM invoices WHERE invoice_id = ?",
+            (invoice_id,),
+        ).fetchone()
+        if not row:
+            flash("Rechnung nicht gefunden.", "error")
+            return redirect(url_for("rechnungen"))
+
+        conn.execute(
+            """
+            UPDATE invoices
+            SET remark = ?,
+                updated_at = ?
+            WHERE invoice_id = ?
+            """,
+            (remark if remark else None, datetime.utcnow().isoformat(), invoice_id),
+        )
+        conn.commit()
+        flash("✅ Bemerkung gespeichert.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Speichern der Bemerkung: {e}", "error")
+    finally:
+        conn.close()
+
+    return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+
+@app.route("/rechnungen/<int:invoice_id>/status", methods=["POST"])
+def rechnung_update_status(invoice_id):
+    status = (request.form.get("status") or "").strip()
+    if status not in MANUAL_INVOICE_STATUSES:
+        flash("Ungültiger Rechnungsstatus.", "error")
+        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT invoice_id FROM invoices WHERE invoice_id = ?",
+            (invoice_id,),
+        ).fetchone()
+        if not row:
+            flash("Rechnung nicht gefunden.", "error")
+            return redirect(url_for("rechnungen"))
+
+        conn.execute(
+            """
+            UPDATE invoices
+            SET status = ?,
+                status_manual = 1,
+                updated_at = ?
+            WHERE invoice_id = ?
+            """,
+            (status, datetime.utcnow().isoformat(), invoice_id),
+        )
+        conn.commit()
+        flash("✅ Rechnungsstatus manuell gespeichert.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Speichern des Rechnungsstatus: {e}", "error")
+    finally:
+        conn.close()
+
+    return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+
+@app.route("/rechnungen/<int:invoice_id>/status/auto", methods=["POST"])
+def rechnung_reset_status_auto(invoice_id):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT invoice_id FROM invoices WHERE invoice_id = ?",
+            (invoice_id,),
+        ).fetchone()
+        if not row:
+            flash("Rechnung nicht gefunden.", "error")
+            return redirect(url_for("rechnungen"))
+        conn.execute(
+            """
+            UPDATE invoices
+            SET status_manual = 0,
+                updated_at = ?
+            WHERE invoice_id = ?
+            """,
+            (datetime.utcnow().isoformat(), invoice_id),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Aktivieren der Status-Automatik: {e}", "error")
+        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+    finally:
+        conn.close()
+
+    try:
+        update_all()
+    except Exception:
+        pass
+    flash("✅ Status-Automatik für diese Rechnung wieder aktiviert.", "success")
+    return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+
+@app.route("/rechnungen/<int:invoice_id>/mahnung", methods=["POST"])
+def rechnung_update_mahnung(invoice_id):
+    allowed_statuses = {"", "1. Mahnung", "2. Mahnung"}
+    reminder_status = (request.form.get("reminder_status") or "").strip()
+    reminder_date_raw = (request.form.get("reminder_date") or "").strip()
+
+    if reminder_status not in allowed_statuses:
+        flash("Ungültiger Mahnungsstatus.", "error")
+        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+    reminder_date = None
+    if reminder_date_raw:
+        try:
+            reminder_date = datetime.fromisoformat(reminder_date_raw).date().isoformat()
+        except ValueError:
+            flash("Mahnungsdatum muss ein gültiges Datum sein.", "error")
+            return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+    if not reminder_status and reminder_date:
+        flash("Mahnungsdatum kann nur zusammen mit einem Mahnungsstatus gesetzt werden.", "error")
+        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+    if reminder_status and not reminder_date:
+        reminder_date = datetime.utcnow().date().isoformat()
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT invoice_id FROM invoices WHERE invoice_id = ?",
+            (invoice_id,),
+        ).fetchone()
+        if not row:
+            flash("Rechnung nicht gefunden.", "error")
+            return redirect(url_for("rechnungen"))
+
+        conn.execute(
+            """
+            UPDATE invoices
+            SET reminder_status = ?,
+                reminder_date = ?,
+                reminder_manual = 1,
+                updated_at = ?
+            WHERE invoice_id = ?
+            """,
+            (
+                reminder_status if reminder_status else None,
+                reminder_date,
+                datetime.utcnow().isoformat(),
+                invoice_id,
+            ),
+        )
+        conn.commit()
+        if reminder_status:
+            flash("✅ Mahnungsstatus manuell gespeichert.", "success")
+        else:
+            flash("✅ Mahnungsstatus manuell auf 'Keine' gesetzt.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Speichern des Mahnungsstatus: {e}", "error")
+    finally:
+        conn.close()
+
+    return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+
+@app.route("/rechnungen/<int:invoice_id>/mahnung/auto", methods=["POST"])
+def rechnung_reset_mahnung_auto(invoice_id):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT invoice_id FROM invoices WHERE invoice_id = ?",
+            (invoice_id,),
+        ).fetchone()
+        if not row:
+            flash("Rechnung nicht gefunden.", "error")
+            return redirect(url_for("rechnungen"))
+
+        conn.execute(
+            """
+            UPDATE invoices
+            SET reminder_manual = 0,
+                updated_at = ?
+            WHERE invoice_id = ?
+            """,
+            (datetime.utcnow().isoformat(), invoice_id),
+        )
+        conn.commit()
+        flash("✅ Automatischen Mahnlauf für diese Rechnung wieder aktiviert.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Aktivieren der Automatik: {e}", "error")
+    finally:
+        conn.close()
+
+    return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+
 # ---------------------------------------------------------------------------
 # Zahlungen (Payments)
 # ---------------------------------------------------------------------------
@@ -253,7 +607,7 @@ def rechnung_detail(invoice_id):
 def zahlungen():
     conn = get_db()
     filter_type = request.args.get("filter", "")
-    show_type = request.args.get("show", "income")  # income (default), all, akonto
+    show_type = request.args.get("show", "income")  # income (default), all, akonto, schadens
     search = request.args.get("q", "").strip()
     page = max(1, int(request.args.get("page", 1)))
     sort_col = request.args.get("sort", "payment_id")
@@ -261,26 +615,47 @@ def zahlungen():
     per_page = int(request.args.get("per_page", 50))
     if per_page not in [20, 50, 100, 200, 500]:
         per_page = 50
-    if show_type not in ["income", "all", "akonto"]:
+    if show_type not in ["income", "all", "akonto", "schadens"]:
         show_type = "income"
+    effective_status_expr = _payment_effective_status_sql("payments")
 
-    valid_cols = ["payment_id", "source", "booking_date", "amount_eur", "beneficiary_name", "reference_text", "match_score", "invoice_id", "matched"]
+    valid_cols = ["payment_id", "source", "booking_date", "amount_eur", "beneficiary_name", "reference_text", "match_score", "invoice_id", "matched", "remark"]
+    sort_expr = {
+        "payment_id": "payments.payment_id",
+        "source": "payments.source",
+        "booking_date": "payments.booking_date",
+        "amount_eur": "payments.amount_eur",
+        "beneficiary_name": "payments.beneficiary_name",
+        "reference_text": "payments.reference_text",
+        "match_score": "payments.match_score",
+        "invoice_id": "payments.invoice_id",
+        "matched": effective_status_expr,
+        "remark": "payments.remark",
+    }
     if sort_col not in valid_cols:
         sort_col = "payment_id"
     if order not in ["asc", "desc"]:
         order = "desc"
 
-    query = "SELECT * FROM payments WHERE 1=1 AND parent_payment_id IS NULL"
+    query = """
+        SELECT payments.*, invoices.remark AS invoice_remark
+        FROM payments
+        LEFT JOIN invoices ON invoices.invoice_id = payments.invoice_id
+        WHERE 1=1
+          AND payments.parent_payment_id IS NULL
+    """
     params = []
     
     # Show filter: only income, all payments, or Akonto (Abschlagsrechnungen 9xxxxx)
     if show_type == "income":
-        query += " AND amount_eur > 0"
+        query += " AND payments.amount_eur > 0"
     elif show_type == "akonto":
         query += """
             AND (
-                COALESCE(akonto, 0) = 1
-                OR (invoice_id BETWEEN 900000 AND 999999)
+                ({status_expr}) = 'Akonto'
+                OR
+                COALESCE(payments.akonto, 0) = 1
+                OR (payments.invoice_id BETWEEN 900000 AND 999999)
                 OR EXISTS (
                     SELECT 1
                     FROM payments child
@@ -291,32 +666,70 @@ def zahlungen():
                       )
                 )
             )
-        """
+        """.format(status_expr=effective_status_expr)
+    elif show_type == "schadens":
+        query += """
+            AND (
+                ({status_expr}) = 'Schadensrechnungen'
+                OR
+                COALESCE(payments.schadensrechnung, 0) = 1
+                OR (payments.invoice_id BETWEEN 800000 AND 899999)
+                OR EXISTS (
+                    SELECT 1
+                    FROM payments child
+                    WHERE child.parent_payment_id = payments.payment_id
+                      AND (
+                        COALESCE(child.schadensrechnung, 0) = 1
+                        OR child.invoice_id BETWEEN 800000 AND 899999
+                      )
+                )
+            )
+        """.format(status_expr=effective_status_expr)
     
     if filter_type == "matched":
-        query += " AND matched = 1"
+        query += f" AND ({effective_status_expr}) = 'Zugeordnet'"
     elif filter_type == "unmatched":
-        query += " AND COALESCE(matched, 0) = 0"
+        query += f" AND ({effective_status_expr}) = 'Offen'"
     elif filter_type == "review":
-        query += " AND COALESCE(matched, 0) = 0 AND match_score IS NOT NULL AND match_score > 0"
+        query += f"""
+            AND ({effective_status_expr}) = 'Offen'
+            AND payments.match_score IS NOT NULL
+            AND payments.match_score > 0
+        """
     if search:
-        query += " AND (reference_text LIKE ? OR beneficiary_name LIKE ? OR CAST(invoice_id AS TEXT) LIKE ?)"
-        params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
-    query += f" ORDER BY {sort_col} {order.upper()} LIMIT ? OFFSET ?"
+        query += """
+            AND (
+                payments.reference_text LIKE ?
+                OR payments.beneficiary_name LIKE ?
+                OR CAST(payments.invoice_id AS TEXT) LIKE ?
+                OR COALESCE(payments.remark, '') LIKE ?
+                OR COALESCE(invoices.remark, '') LIKE ?
+            )
+        """
+        params.extend([f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"])
+    query += f" ORDER BY {sort_expr[sort_col]} {order.upper()} LIMIT ? OFFSET ?"
     params.extend([per_page, (page - 1) * per_page])
 
     payments = conn.execute(query, params).fetchall()
 
-    count_query = "SELECT COUNT(*) FROM payments WHERE 1=1 AND parent_payment_id IS NULL"
+    count_query = """
+        SELECT COUNT(*)
+        FROM payments
+        LEFT JOIN invoices ON invoices.invoice_id = payments.invoice_id
+        WHERE 1=1
+          AND payments.parent_payment_id IS NULL
+    """
     count_params = []
     
     if show_type == "income":
-        count_query += " AND amount_eur > 0"
+        count_query += " AND payments.amount_eur > 0"
     elif show_type == "akonto":
         count_query += """
             AND (
-                COALESCE(akonto, 0) = 1
-                OR (invoice_id BETWEEN 900000 AND 999999)
+                ({status_expr}) = 'Akonto'
+                OR
+                COALESCE(payments.akonto, 0) = 1
+                OR (payments.invoice_id BETWEEN 900000 AND 999999)
                 OR EXISTS (
                     SELECT 1
                     FROM payments child
@@ -327,17 +740,47 @@ def zahlungen():
                       )
                 )
             )
-        """
+        """.format(status_expr=effective_status_expr)
+    elif show_type == "schadens":
+        count_query += """
+            AND (
+                ({status_expr}) = 'Schadensrechnungen'
+                OR
+                COALESCE(payments.schadensrechnung, 0) = 1
+                OR (payments.invoice_id BETWEEN 800000 AND 899999)
+                OR EXISTS (
+                    SELECT 1
+                    FROM payments child
+                    WHERE child.parent_payment_id = payments.payment_id
+                      AND (
+                        COALESCE(child.schadensrechnung, 0) = 1
+                        OR child.invoice_id BETWEEN 800000 AND 899999
+                      )
+                )
+            )
+        """.format(status_expr=effective_status_expr)
         
     if filter_type == "matched":
-        count_query += " AND matched = 1"
+        count_query += f" AND ({effective_status_expr}) = 'Zugeordnet'"
     elif filter_type == "unmatched":
-        count_query += " AND COALESCE(matched, 0) = 0"
+        count_query += f" AND ({effective_status_expr}) = 'Offen'"
     elif filter_type == "review":
-        count_query += " AND COALESCE(matched, 0) = 0 AND match_score IS NOT NULL AND match_score > 0"
+        count_query += f"""
+            AND ({effective_status_expr}) = 'Offen'
+            AND payments.match_score IS NOT NULL
+            AND payments.match_score > 0
+        """
     if search:
-        count_query += " AND (reference_text LIKE ? OR beneficiary_name LIKE ? OR CAST(invoice_id AS TEXT) LIKE ?)"
-        count_params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        count_query += """
+            AND (
+                payments.reference_text LIKE ?
+                OR payments.beneficiary_name LIKE ?
+                OR CAST(payments.invoice_id AS TEXT) LIKE ?
+                OR COALESCE(payments.remark, '') LIKE ?
+                OR COALESCE(invoices.remark, '') LIKE ?
+            )
+        """
+        count_params.extend([f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"])
     total = conn.execute(count_query, count_params).fetchone()[0]
     conn.close()
 
@@ -367,7 +810,8 @@ def zahlung_detail(payment_id):
         """
         SELECT p.payment_id, p.parent_payment_id, p.invoice_id, p.amount_eur, p.match_score,
                i.name AS invoice_name, i.amount_gross AS invoice_amount_gross,
-               i.status AS invoice_status, i.reminder_status AS invoice_reminder_status
+               i.status AS invoice_status, i.reminder_status AS invoice_reminder_status,
+               i.remark AS invoice_remark
         FROM payments p
         LEFT JOIN invoices i ON i.invoice_id = p.invoice_id
         WHERE p.parent_payment_id = ?
@@ -401,6 +845,128 @@ def zahlung_detail(payment_id):
         parent_payment=parent_payment,
         audit=audit,
     )
+
+
+@app.route("/zahlungen/<int:payment_id>/bemerkung", methods=["POST"])
+def zahlung_update_bemerkung(payment_id):
+    raw_remark = request.form.get("remark", "")
+    remark = str(raw_remark or "").strip()
+    if len(remark) > 2000:
+        flash("Bemerkung ist zu lang (max. 2000 Zeichen).", "error")
+        return redirect(url_for("zahlung_detail", payment_id=payment_id))
+
+    conn = get_db()
+    target_id = payment_id
+    try:
+        pay = _resolve_editable_payment(conn, payment_id)
+        if not pay:
+            flash("Zahlung nicht gefunden.", "error")
+            return redirect(url_for("zahlungen"))
+        target_id = pay["payment_id"]
+
+        value = remark if remark else None
+        conn.execute(
+            "UPDATE payments SET remark = ? WHERE payment_id = ?",
+            (value, target_id),
+        )
+        conn.execute(
+            "UPDATE payments SET remark = ? WHERE parent_payment_id = ?",
+            (value, target_id),
+        )
+        conn.commit()
+        flash("✅ Bemerkung zur Zahlung gespeichert.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Speichern der Zahlungs-Bemerkung: {e}", "error")
+    finally:
+        conn.close()
+
+    return redirect(url_for("zahlung_detail", payment_id=target_id))
+
+
+@app.route("/zahlungen/<int:payment_id>/status", methods=["POST"])
+def zahlung_update_status(payment_id):
+    manual_status = (request.form.get("status") or "").strip()
+    if manual_status not in MANUAL_PAYMENT_STATUSES:
+        flash("Ungültiger Zahlungsstatus.", "error")
+        return redirect(url_for("zahlung_detail", payment_id=payment_id))
+
+    conn = get_db()
+    target_id = payment_id
+    try:
+        pay = _resolve_editable_payment(conn, payment_id)
+        if not pay:
+            flash("Zahlung nicht gefunden.", "error")
+            return redirect(url_for("zahlungen"))
+        target_id = pay["payment_id"]
+
+        conn.execute(
+            """
+            UPDATE payments
+            SET status_override = ?,
+                status_manual = 1
+            WHERE payment_id = ?
+            """,
+            (manual_status, target_id),
+        )
+        conn.execute(
+            """
+            UPDATE payments
+            SET status_override = ?,
+                status_manual = 1
+            WHERE parent_payment_id = ?
+            """,
+            (manual_status, target_id),
+        )
+        conn.commit()
+        flash("✅ Zahlungsstatus manuell gespeichert.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Speichern des Zahlungsstatus: {e}", "error")
+    finally:
+        conn.close()
+
+    return redirect(url_for("zahlung_detail", payment_id=target_id))
+
+
+@app.route("/zahlungen/<int:payment_id>/status/auto", methods=["POST"])
+def zahlung_reset_status_auto(payment_id):
+    conn = get_db()
+    target_id = payment_id
+    try:
+        pay = _resolve_editable_payment(conn, payment_id)
+        if not pay:
+            flash("Zahlung nicht gefunden.", "error")
+            return redirect(url_for("zahlungen"))
+        target_id = pay["payment_id"]
+
+        conn.execute(
+            """
+            UPDATE payments
+            SET status_override = NULL,
+                status_manual = 0
+            WHERE payment_id = ?
+            """,
+            (target_id,),
+        )
+        conn.execute(
+            """
+            UPDATE payments
+            SET status_override = NULL,
+                status_manual = 0
+            WHERE parent_payment_id = ?
+            """,
+            (target_id,),
+        )
+        conn.commit()
+        flash("✅ Zahlungsstatus wieder auf Automatik gesetzt.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Zurücksetzen des Zahlungsstatus: {e}", "error")
+    finally:
+        conn.close()
+
+    return redirect(url_for("zahlung_detail", payment_id=target_id))
 
 
 @app.route("/zahlungen/<int:payment_id>/manual/assign", methods=["POST"])
@@ -491,8 +1057,8 @@ def zahlung_manual_split(payment_id):
             conn.execute(
                 """INSERT INTO payments(
                      invoice_id, parent_payment_id, source, booking_date, value_date, amount_eur,
-                     reference_text, iban, beneficiary_name, matched, match_score, match_rule, created_by
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1.0, 'manual_split_child', 'manual')""",
+                     reference_text, iban, beneficiary_name, remark, matched, match_score, match_rule, created_by
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1.0, 'manual_split_child', 'manual')""",
                 (
                     inv_id,
                     target_id,
@@ -503,6 +1069,7 @@ def zahlung_manual_split(payment_id):
                     pay["reference_text"],
                     pay["iban"],
                     pay["beneficiary_name"],
+                    pay["remark"],
                 ),
             )
             child_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]

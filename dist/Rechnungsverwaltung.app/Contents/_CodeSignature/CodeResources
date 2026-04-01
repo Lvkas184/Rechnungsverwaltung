@@ -6,7 +6,7 @@
 	<dict>
 		<key>Resources/base_library.zip</key>
 		<data>
-		bklAvs1MDXhaSn1SCvMzA0utqxM=
+		z790YtwBVcdCS4RTkWzI0qW02Ro=
 		</data>
 		<key>Resources/cryptography-46.0.6.dist-info/INSTALLER</key>
 		<data>
@@ -138,11 +138,11 @@
 		</data>
 		<key>Resources/parameters.json</key>
 		<data>
-		1srmBfzF+qBC+iLDYbB88DyEp5g=
+		j6B6XzRfQsKKqFA1Cr+0mRT0bWE=
 		</data>
 		<key>Resources/schema/schema.sql</key>
 		<data>
-		/1Etdk5NJ3f0f9wT4SsOWj73XUU=
+		IvWXG/bfFaVmnGBTugFIcWfN5sI=
 		</data>
 		<key>Resources/static/app.js</key>
 		<data>
@@ -150,7 +150,7 @@
 		</data>
 		<key>Resources/static/style.css</key>
 		<data>
-		jMDXdIyBtICLVeYq2/vbrVyBSrE=
+		2Z3VZr41PIfEegKU3Vn5BLPuC9M=
 		</data>
 		<key>Resources/templates/audit.html</key>
 		<data>
@@ -158,11 +158,15 @@
 		</data>
 		<key>Resources/templates/base.html</key>
 		<data>
-		yuYIk19lgT5lzjLWHR2w10sv+Eg=
+		WK2TshjCDG0S0EmNzBLNblJHeDo=
 		</data>
 		<key>Resources/templates/dashboard.html</key>
 		<data>
 		plyKRDkkD8Kict0MZ5j536Y2efc=
+		</data>
+		<key>Resources/templates/einstellungen.html</key>
+		<data>
+		+QA3yrnlV8/LS+sW/dmrvaDxOoE=
 		</data>
 		<key>Resources/templates/migration.html</key>
 		<data>
@@ -170,11 +174,11 @@
 		</data>
 		<key>Resources/templates/rechnung_detail.html</key>
 		<data>
-		T2Pyis/hkrosGTwkGcUoG2E4NIQ=
+		/ctPmkj0vwCm+EeNM5K/qyhg2RE=
 		</data>
 		<key>Resources/templates/rechnungen.html</key>
 		<data>
-		b6cd0HzQ5xeMlqr5wKN7og7O63k=
+		pgJyH/gBa9SkcpabHTCVuIbvlyA=
 		</data>
 		<key>Resources/templates/upload.html</key>
 		<data>
@@ -182,11 +186,11 @@
 		</data>
 		<key>Resources/templates/zahlung_detail.html</key>
 		<data>
-		ibpjdxwPpPeQjc/ZZkLxE1ie7GY=
+		Nqjue/7JFN5q6ufNA1KXGKOHYBw=
 		</data>
 		<key>Resources/templates/zahlungen.html</key>
 		<data>
-		xDD1m/Plqq3/S33DVkxPsYmVOpA=
+		WQprz7QkpVhok7JY9ulY4e6rsWA=
 		</data>
 		<key>Resources/templates/zuordnungen.html</key>
 		<data>
@@ -963,7 +967,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			0uefeYa4Ztwi4Zk2IzjxfqAuJKDhcM1bDI+1rS1PnTo=
+			yoZaepwc8OH03Ng3AQcBUubmo6eR414FnZPQWU+PqP4=
 			</data>
 		</dict>
 		<key>Resources/cryptography</key>
@@ -1209,7 +1213,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			NzX52ov2vly7i4oiEzJ44BukR9pzwYcgTEY0rjzOvlg=
+			bWcJbIHbFtEW+HM2LiKqMBJ9jCJYK0oqKxHc5y6PYms=
 			</data>
 		</dict>
 		<key>Resources/python3.9</key>
@@ -1226,7 +1230,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			D6ny0x8uHksFbOGCoExfkbbhrqJnWm8y48enwQXmaH0=
+			zhjRZJ4J9l3GF7Z0u7SP8fehw12k5e1FY7ChWWjRINs=
 			</data>
 		</dict>
 		<key>Resources/static/app.js</key>
@@ -1240,7 +1244,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			g+eZOUgFkvsemo0UbKLx2BMX3vjKRXFcyvhzJDSDCKQ=
+			0I17ftlohjFA3e+FVuQUUjv3TAVFHSyDm/JqqGkCakA=
 			</data>
 		</dict>
 		<key>Resources/templates/audit.html</key>
@@ -1254,7 +1258,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			0YWQE5LmWVAYtCVzbRf3ECfhMyihfbRfGqRzRlP6ULE=
+			dDPLqQoAwMbpFhNLbeQRLZtyXgDWyVLVgDDhMmdh9Xk=
 			</data>
 		</dict>
 		<key>Resources/templates/dashboard.html</key>
@@ -1262,6 +1266,13 @@
 			<key>hash2</key>
 			<data>
 			jXQydZUkfh6BeNslZfo8fqLUjIynOoPZycs+hteNsvQ=
+			</data>
+		</dict>
+		<key>Resources/templates/einstellungen.html</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			BNlbJ7Su05b/Oa+3NHezbBxexSKJSgUsef6MoG4S2og=
 			</data>
 		</dict>
 		<key>Resources/templates/migration.html</key>
@@ -1275,14 +1286,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			24DaJ5eKJ8HTOBLZM+k7oqdOJz+dp9SN0I+nKbuq4rY=
+			pwTC26BL02U61TqEVFTQZhp0wPgD/OQcmXXWT7/Xo9s=
 			</data>
 		</dict>
 		<key>Resources/templates/rechnungen.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			d0MXAgwACBLGiowGO17Qm1hHb7vD/VST0V/Ztw2vcz8=
+			xV3F5LWxriY7Ln46KLRezNhf6g5SfTdr+qjJs1GnCtg=
 			</data>
 		</dict>
 		<key>Resources/templates/upload.html</key>
@@ -1296,14 +1307,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			O9XuDBAbh1z3jXloo3gVSqVzP+2XWjhAj+FbjcqqenI=
+			HwXtMaA7U49OrN0b78PYxgmkdsqa+6OCywP6GNjlOZ0=
 			</data>
 		</dict>
 		<key>Resources/templates/zahlungen.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			+V2JLwToBHfYn7yQLBj/2JHSUlglmRqzUjy+y9LXeeE=
+			OzZMR4GWhW8x6iBZ/7QAEG+s8W7AauzGRBaggSyG6e8=
 			</data>
 		</dict>
 		<key>Resources/templates/zuordnungen.html</key>

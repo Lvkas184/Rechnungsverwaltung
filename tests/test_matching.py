@@ -43,6 +43,10 @@ def test_extract_invoice_number_allows_akonto_9xxxxx():
     assert extract_invoice_number("SVWZ+2. Abschlagsrechnung 923399") == 923399
 
 
+def test_extract_invoice_number_allows_schadensrechnung_8xxxxx():
+    assert extract_invoice_number("SVWZ+Schadensrechnung 823399 vom 10.03.2026") == 823399
+
+
 def test_match_payment_row_marks_akonto_reference_as_excluded():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
@@ -58,6 +62,42 @@ def test_match_payment_row_marks_akonto_reference_as_excluded():
     }
     res = match_payment_row(conn, payment)
     assert res["rule"] == "akonto_excluded"
+    assert res["invoice_id"] is None
+
+
+def test_match_payment_row_marks_12digit_akonto_reference_as_excluded():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        "CREATE TABLE invoices(invoice_id INTEGER PRIMARY KEY, name TEXT, amount_gross REAL, paid_sum_eur REAL, status TEXT)"
+    )
+    payment = {
+        "reference_text": "EREF+NOTPROVIDEDSVWZ+Abschlag Zahlung Nr. 913392100879",
+        "amount_eur": 15374.5,
+        "beneficiary_name": "Nees GmbH + Co. KG",
+        "invoice_id": None,
+        "matched": 0,
+    }
+    res = match_payment_row(conn, payment)
+    assert res["rule"] == "akonto_excluded"
+    assert res["invoice_id"] is None
+
+
+def test_match_payment_row_marks_schadens_reference_as_excluded():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        "CREATE TABLE invoices(invoice_id INTEGER PRIMARY KEY, name TEXT, amount_gross REAL, paid_sum_eur REAL, status TEXT)"
+    )
+    payment = {
+        "reference_text": "SVWZ+Schadensrechnung 823399 Schadenfall 100802",
+        "amount_eur": 7374.5,
+        "beneficiary_name": "Nees GmbH + Co. KG",
+        "invoice_id": None,
+        "matched": 0,
+    }
+    res = match_payment_row(conn, payment)
+    assert res["rule"] == "schadensrechnung_excluded"
     assert res["invoice_id"] is None
 
 

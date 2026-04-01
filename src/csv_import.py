@@ -15,8 +15,8 @@ import encodings.cp1252     # Force PyInstaller to bundle cp1252
 from datetime import datetime, timedelta
 
 from src.db import get_db
-from src.invoice_rules import is_akonto_invoice_id
-from src.payment_rules import is_akonto_payment
+from src.invoice_rules import classify_special_invoice_status
+from src.payment_rules import is_akonto_payment, is_schadensrechnung_payment
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -188,7 +188,7 @@ def import_datev_rechnungen(file_content, db_path=None):
         name = val(idx_text)
         date = _parse_date(val(idx_date))
         due_date = _parse_date(val(idx_due))
-        default_status = "Akonto" if is_akonto_invoice_id(inv_nr) else "Offen"
+        default_status = classify_special_invoice_status(inv_nr) or "Offen"
 
         conn.execute(
             """INSERT OR REPLACE INTO invoices(invoice_id, name, amount_gross, issue_date, due_date,
@@ -270,12 +270,23 @@ def import_bank_csv(file_content, source_name, db_path=None):
         iban = val(idx_iban)
         reference = val(idx_ref)
         akonto_flag = 1 if is_akonto_payment(reference) else 0
+        schadens_flag = 1 if is_schadensrechnung_payment(reference) else 0
 
         conn.execute(
             """INSERT INTO payments(invoice_id, source, booking_date, value_date,
-                 amount_eur, reference_text, iban, beneficiary_name, matched, akonto)
-               VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 0, ?)""",
-            (source_name, booking_date, valuta_date, amount, reference, iban, name, akonto_flag),
+                 amount_eur, reference_text, iban, beneficiary_name, matched, akonto, schadensrechnung)
+               VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+            (
+                source_name,
+                booking_date,
+                valuta_date,
+                amount,
+                reference,
+                iban,
+                name,
+                akonto_flag,
+                schadens_flag,
+            ),
         )
         imported += 1
 
@@ -385,11 +396,12 @@ def import_legacy_csv(file_content, db_path=None):
                 pass
 
         akonto_flag = 1 if is_akonto_payment(reference, matched_invoice_id) else 0
+        schadens_flag = 1 if is_schadensrechnung_payment(reference, matched_invoice_id) else 0
 
         conn.execute(
             """INSERT INTO payments(invoice_id, source, booking_date, value_date,
-                 amount_eur, reference_text, iban, beneficiary_name, matched, akonto, match_score, match_rule)
-               VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)""",
+                 amount_eur, reference_text, iban, beneficiary_name, matched, akonto, schadensrechnung, match_score, match_rule)
+               VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)""",
             (
                 matched_invoice_id,
                 bank,
@@ -400,6 +412,7 @@ def import_legacy_csv(file_content, db_path=None):
                 name,
                 is_matched,
                 akonto_flag,
+                schadens_flag,
                 match_score,
                 match_rule,
             ),
@@ -475,7 +488,7 @@ def import_legacy_invoices_csv(file_content, db_path=None):
             amount = -amount
 
         name = val(idx_name)
-        default_status = "Akonto" if is_akonto_invoice_id(inv_nr) else "Offen"
+        default_status = classify_special_invoice_status(inv_nr) or "Offen"
 
         conn.execute(
             """INSERT OR REPLACE INTO invoices(invoice_id, name, amount_gross, 
