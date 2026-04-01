@@ -10,6 +10,7 @@
         <select name="status" class="filter-select" onchange="this.form.submit()">
             <option value="">Alle Status</option>
             <option value="Offen" {{ 'selected' if status_filter == 'Offen' }}>🔴 Offen</option>
+            <option value="In Klärung" {{ 'selected' if status_filter == 'In Klärung' }}>🟠 In Klärung</option>
             <option value="Bezahlt" {{ 'selected' if status_filter == 'Bezahlt' }}>🟢 Bezahlt</option>
             <option value="Bezahlt mit Mahngebühr" {{ 'selected' if status_filter == 'Bezahlt mit Mahngebühr' }}>✅ Bezahlt mit Mahngebühr</option>
             <option value="Teiloffen/Unterzahlung" {{ 'selected' if status_filter == 'Teiloffen/Unterzahlung' }}>🟡 Teiloffen</option>
@@ -62,7 +63,7 @@
             <td class="cell-amount col-paid">{{ inv.paid_sum_eur | format_eur }}</td>
             <td class="cell-amount col-deviation">{{ inv.deviation_eur | format_eur }}</td>
             <td class="col-status">
-                <span class="status-badge status-{{ inv.status | lower | replace('/', '-') | replace(' ', '-') if inv.status else 'offen' }}">
+                <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
                     {{ inv.status or "Offen" }}
                 </span>
                 {% if inv.status_manual %}

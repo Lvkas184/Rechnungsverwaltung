@@ -36,7 +36,7 @@
         <dl class="detail-list">
             <dt>Status</dt>
             <dd>
-                <span class="status-badge status-{{ inv.status | lower | replace('/', '-') | replace(' ', '-') if inv.status else 'offen' }}">
+                <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
                     {{ inv.status or "Offen" }}
                 </span>
             </dd>
@@ -103,6 +103,7 @@
             <label for="invoice_manual_status">Status</label>
             <select id="invoice_manual_status" name="status" class="form-input">
                 <option value="Offen" {{ 'selected' if inv.status == 'Offen' }}>Offen</option>
+                <option value="In Klärung" {{ 'selected' if inv.status == 'In Klärung' }}>In Klärung</option>
                 <option value="Bezahlt" {{ 'selected' if inv.status == 'Bezahlt' }}>Bezahlt</option>
                 <option value="Bezahlt mit Mahngebühr" {{ 'selected' if inv.status == 'Bezahlt mit Mahngebühr' }}>Bezahlt mit Mahngebühr</option>
                 <option value="Teiloffen/Unterzahlung" {{ 'selected' if inv.status == 'Teiloffen/Unterzahlung' }}>Teiloffen/Unterzahlung</option>

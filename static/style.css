@@ -488,6 +488,11 @@ h2 {
     color: #dc2626;
 }
 
+.status-in-klaerung {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
 .status-bezahlt {
     background: #d1fae5;
     color: #059669;

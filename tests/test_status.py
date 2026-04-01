@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import src.status as status_module
 import src.db as db_module
 from src.status import compute_status_row
+import app as app_module
 
 
 def test_offen():
@@ -111,6 +112,10 @@ def test_schadensrechnung_for_8xxxxx_invoice():
     )
     assert status == "Schadensrechnungen"
     assert dev == -50.0
+
+
+def test_manual_invoice_statuses_include_in_klaerung():
+    assert "In Klärung" in app_module.MANUAL_INVOICE_STATUSES
 
 
 def test_update_all_keeps_manual_invoice_status(tmp_path, monkeypatch):

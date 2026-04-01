@@ -45,6 +45,7 @@ DEFAULT_PARAMS = {
 }
 MANUAL_INVOICE_STATUSES = {
     "Offen",
+    "In Klärung",
     "Bezahlt",
     "Bezahlt mit Mahngebühr",
     "Teiloffen/Unterzahlung",
@@ -96,6 +97,25 @@ def format_date(value):
         return d.strftime("%d.%m.%Y")
     except (ValueError, TypeError):
         return str(value)
+
+
+@app.template_filter("status_class")
+def status_class(value):
+    """Map status labels to stable ASCII CSS class names."""
+    s = str(value or "").strip().lower()
+    replacements = {
+        "ä": "ae",
+        "ö": "oe",
+        "ü": "ue",
+        "ß": "ss",
+        "/": "-",
+        " ": "-",
+    }
+    for old, new in replacements.items():
+        s = s.replace(old, new)
+    while "--" in s:
+        s = s.replace("--", "-")
+    return s or "offen"
 
 
 def _parse_eur(value):
@@ -242,7 +262,9 @@ def dashboard():
     payment_status_expr = _payment_effective_status_sql("p")
     stats = {
         "total_invoices": conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0],
-        "open_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE COALESCE(status, 'Offen') = 'Offen'").fetchone()[0],
+        "open_invoices": conn.execute(
+            "SELECT COUNT(*) FROM invoices WHERE COALESCE(status, 'Offen') IN ('Offen', 'In Klärung')"
+        ).fetchone()[0],
         "partial_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE status = 'Teiloffen/Unterzahlung'").fetchone()[0],
         "paid_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE status IN ('Bezahlt', 'Bezahlt mit Mahngebühr')").fetchone()[0],
         "overpaid_invoices": conn.execute("SELECT COUNT(*) FROM invoices WHERE status = 'Überzahlung'").fetchone()[0],

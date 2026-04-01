@@ -204,7 +204,7 @@
             <td>{{ inv.name or "—" }}</td>
             <td class="cell-amount">{{ inv.amount_gross | format_eur }}</td>
             <td>
-                <span class="status-badge status-{{ inv.status | lower | replace('/', '-') | replace(' ', '-') if inv.status else 'offen' }}">
+                <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
                     {{ inv.status or "Offen" }}
                 </span>
             </td>
@@ -245,7 +245,7 @@
             <td class="cell-amount">{{ split.amount_eur | format_eur }}</td>
             <td class="cell-amount">{{ split.invoice_amount_gross | format_eur }}</td>
             <td>
-                <span class="status-badge status-{{ split.invoice_status | lower | replace('/', '-') | replace(' ', '-') if split.invoice_status else 'offen' }}">
+                <span class="status-badge status-{{ split.invoice_status | status_class if split.invoice_status else 'offen' }}">
                     {{ split.invoice_status or "Offen" }}
                 </span>
             </td>
