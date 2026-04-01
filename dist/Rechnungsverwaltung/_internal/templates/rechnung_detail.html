@@ -2,9 +2,39 @@
 {% block title %}Rechnung {{ inv.invoice_id }} — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
-<div class="detail-header">
-    <a href="{{ url_for('rechnungen') }}" class="btn btn-secondary">← Zurück</a>
-    <h1>Rechnung #{{ inv.invoice_id }}</h1>
+<div class="page-hero">
+    <div>
+        <p class="page-kicker">Rechnungsdetail</p>
+        <div class="detail-header" style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+            <a href="{{ url_for('rechnungen') }}" class="btn btn-secondary">← Zurück</a>
+            <h1 style="margin-bottom: 0;">Rechnung #{{ inv.invoice_id }}</h1>
+        </div>
+        <p class="page-desc">
+            Stammdaten, Zahlungsstand, Mahnverlauf und manuelle Eingriffe für diese einzelne Rechnung.
+        </p>
+    </div>
+</div>
+
+<div class="metric-strip">
+    <div class="metric-card">
+        <span class="metric-card-label">Betrag brutto</span>
+        <div class="metric-card-value">{{ inv.amount_gross | format_eur }}</div>
+        <div class="metric-card-caption">{{ inv.name or "Kein Name hinterlegt" }}</div>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">Bezahlt</span>
+        <div class="metric-card-value">{{ inv.paid_sum_eur | format_eur }}</div>
+        <div class="metric-card-caption">Letzte Zahlung: {{ inv.last_payment_date | format_date }}</div>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">Aktueller Status</span>
+        <div style="margin-top: 6px;">
+            <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
+                {{ inv.status or "Offen" }}
+            </span>
+        </div>
+        <div class="metric-card-caption">{{ inv.payment_count or 0 }} zugeordnete Zahlung(en)</div>
+    </div>
 </div>
 
 <div class="detail-grid">
@@ -93,113 +123,119 @@
     </div>
 </div>
 
-<div class="card">
-    <h2>Status der Rechnung manuell setzen</h2>
-    <p class="page-desc" style="margin-bottom: 14px;">
-        Manuell gesetzte Rechnungs-Status bleiben bei "Matching starten" und "Status aktualisieren" erhalten.
-    </p>
-    <form method="POST" action="{{ url_for('rechnung_update_status', invoice_id=inv.invoice_id) }}" class="inline-form">
-        <div class="form-group">
-            <label for="invoice_manual_status">Status</label>
-            <select id="invoice_manual_status" name="status" class="form-input">
-                <option value="Offen" {{ 'selected' if inv.status == 'Offen' }}>Offen</option>
-                <option value="In Klärung" {{ 'selected' if inv.status == 'In Klärung' }}>In Klärung</option>
-                <option value="Bezahlt" {{ 'selected' if inv.status == 'Bezahlt' }}>Bezahlt</option>
-                <option value="Bezahlt mit Mahngebühr" {{ 'selected' if inv.status == 'Bezahlt mit Mahngebühr' }}>Bezahlt mit Mahngebühr</option>
-                <option value="Teiloffen/Unterzahlung" {{ 'selected' if inv.status == 'Teiloffen/Unterzahlung' }}>Teiloffen/Unterzahlung</option>
-                <option value="Überzahlung" {{ 'selected' if inv.status == 'Überzahlung' }}>Überzahlung</option>
-                <option value="Akonto" {{ 'selected' if inv.status == 'Akonto' }}>Akonto</option>
-                <option value="Schadensrechnungen" {{ 'selected' if inv.status == 'Schadensrechnungen' }}>Schadensrechnungen</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary">💾 Status speichern</button>
-    </form>
-    <form method="POST" action="{{ url_for('rechnung_reset_status_auto', invoice_id=inv.invoice_id) }}" style="margin-top: 12px;">
-        <button type="submit" class="btn btn-secondary">↺ Status-Automatik aktivieren</button>
-    </form>
-</div>
+<div class="detail-action-grid">
+    <div class="card">
+        <h2>Status der Rechnung manuell setzen</h2>
+        <p class="page-desc" style="margin-bottom: 14px;">
+            Manuell gesetzte Rechnungs-Status bleiben bei "Matching starten" und "Status aktualisieren" erhalten.
+        </p>
+        <form method="POST" action="{{ url_for('rechnung_update_status', invoice_id=inv.invoice_id) }}" class="inline-form">
+            <div class="form-group">
+                <label for="invoice_manual_status">Status</label>
+                <select id="invoice_manual_status" name="status" class="form-input">
+                    <option value="Offen" {{ 'selected' if inv.status == 'Offen' }}>Offen</option>
+                    <option value="In Klärung" {{ 'selected' if inv.status == 'In Klärung' }}>In Klärung</option>
+                    <option value="Bezahlt" {{ 'selected' if inv.status == 'Bezahlt' }}>Bezahlt</option>
+                    <option value="Bezahlt mit Mahngebühr" {{ 'selected' if inv.status == 'Bezahlt mit Mahngebühr' }}>Bezahlt mit Mahngebühr</option>
+                    <option value="Teiloffen/Unterzahlung" {{ 'selected' if inv.status == 'Teiloffen/Unterzahlung' }}>Teiloffen/Unterzahlung</option>
+                    <option value="Überzahlung" {{ 'selected' if inv.status == 'Überzahlung' }}>Überzahlung</option>
+                    <option value="Akonto" {{ 'selected' if inv.status == 'Akonto' }}>Akonto</option>
+                    <option value="Schadensrechnungen" {{ 'selected' if inv.status == 'Schadensrechnungen' }}>Schadensrechnungen</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Status speichern</button>
+        </form>
+        <form method="POST" action="{{ url_for('rechnung_reset_status_auto', invoice_id=inv.invoice_id) }}" style="margin-top: 12px;">
+            <button type="submit" class="btn btn-secondary">↺ Status-Automatik aktivieren</button>
+        </form>
+    </div>
 
-<div class="card">
-    <h2>Bemerkung zur Rechnung</h2>
-    <form method="POST" action="{{ url_for('rechnung_update_bemerkung', invoice_id=inv.invoice_id) }}">
-        <div class="form-group" style="min-width: 100%;">
-            <label for="invoice_remark">Bemerkung</label>
-            <textarea
-                id="invoice_remark"
-                name="remark"
-                class="form-input"
-                rows="4"
-                placeholder="Optionaler Hinweis zur Rechnung…"
-            >{{ inv.remark or '' }}</textarea>
-        </div>
-        <button type="submit" class="btn btn-primary">💾 Bemerkung speichern</button>
-    </form>
-</div>
+    <div class="card">
+        <h2>Bemerkung zur Rechnung</h2>
+        <form method="POST" action="{{ url_for('rechnung_update_bemerkung', invoice_id=inv.invoice_id) }}">
+            <div class="form-group" style="min-width: 100%;">
+                <label for="invoice_remark">Bemerkung</label>
+                <textarea
+                    id="invoice_remark"
+                    name="remark"
+                    class="form-input"
+                    rows="4"
+                    placeholder="Optionaler Hinweis zur Rechnung…"
+                >{{ inv.remark or '' }}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Bemerkung speichern</button>
+        </form>
+    </div>
 
-<div class="card">
-    <h2>Mahnung speichern</h2>
-    <p class="page-desc" style="margin-bottom: 14px;">
-        Jede Mahnstufe wird mit eigenem Datum gespeichert. In der Rechnungsübersicht zählt immer die zuletzt erreichte Mahnstufe.
-    </p>
-    <form method="POST" action="{{ url_for('rechnung_update_mahnung', invoice_id=inv.invoice_id) }}" class="inline-form">
-        <div class="form-group">
-            <label for="reminder_status">Mahnungsstatus</label>
-            <select id="reminder_status" name="reminder_status" class="form-input">
-                <option value="" {{ 'selected' if not inv.reminder_status }}>Keine Mahnung</option>
-                <option value="1. Mahnung" {{ 'selected' if inv.reminder_status == '1. Mahnung' }}>1. Mahnung</option>
-                <option value="2. Mahnung" {{ 'selected' if inv.reminder_status == '2. Mahnung' }}>2. Mahnung</option>
-                <option value="3. Mahnung" {{ 'selected' if inv.reminder_status == '3. Mahnung' }}>3. Mahnung</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="reminder_date">Mahnungsdatum</label>
-            <input
-                id="reminder_date"
-                type="date"
-                name="reminder_date"
-                class="form-input"
-                value="{{ inv.reminder_date or '' }}"
-            >
-        </div>
-        <button type="submit" class="btn btn-primary">💾 Mahnung speichern</button>
-    </form>
-    <form method="POST" action="{{ url_for('rechnung_reset_mahnung_auto', invoice_id=inv.invoice_id) }}" style="margin-top: 12px;">
-        <button type="submit" class="btn btn-secondary">↺ Automatik wieder aktivieren</button>
-    </form>
+    <div class="card">
+        <h2>Mahnung speichern</h2>
+        <p class="page-desc" style="margin-bottom: 14px;">
+            Jede Mahnstufe wird mit eigenem Datum gespeichert. In der Rechnungsübersicht zählt immer die zuletzt erreichte Mahnstufe.
+        </p>
+        <form method="POST" action="{{ url_for('rechnung_update_mahnung', invoice_id=inv.invoice_id) }}" class="inline-form">
+            <div class="form-group">
+                <label for="reminder_status">Mahnungsstatus</label>
+                <select id="reminder_status" name="reminder_status" class="form-input">
+                    <option value="" {{ 'selected' if not inv.reminder_status }}>Keine Mahnung</option>
+                    <option value="1. Mahnung" {{ 'selected' if inv.reminder_status == '1. Mahnung' }}>1. Mahnung</option>
+                    <option value="2. Mahnung" {{ 'selected' if inv.reminder_status == '2. Mahnung' }}>2. Mahnung</option>
+                    <option value="3. Mahnung" {{ 'selected' if inv.reminder_status == '3. Mahnung' }}>3. Mahnung</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="reminder_date">Mahnungsdatum</label>
+                <input
+                    id="reminder_date"
+                    type="date"
+                    name="reminder_date"
+                    class="form-input"
+                    value="{{ inv.reminder_date or '' }}"
+                >
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Mahnung speichern</button>
+        </form>
+        <form method="POST" action="{{ url_for('rechnung_reset_mahnung_auto', invoice_id=inv.invoice_id) }}" style="margin-top: 12px;">
+            <button type="submit" class="btn btn-secondary">↺ Automatik wieder aktivieren</button>
+        </form>
+    </div>
 </div>
 
 {% if payments %}
-<h2>Zugeordnete Zahlungen ({{ payments | length }})</h2>
-<div class="table-responsive">
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Quelle</th>
-            <th>Buchungsdatum</th>
-            <th>Betrag</th>
-            <th>Absender</th>
-            <th>Verwendungszweck</th>
-            <th>Score</th>
-            <th>Bemerkung Zahlung</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for p in payments %}
-        {% set payment_link_id = p.parent_payment_id if p.parent_payment_id else p.payment_id %}
-        <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=payment_link_id) }}'">
-            <td>{{ payment_link_id }}</td>
-            <td><span class="badge">{{ p.source or "—" }}</span></td>
-            <td>{{ p.booking_date | format_date }}</td>
-            <td class="cell-amount">{{ p.amount_eur | format_eur }}</td>
-            <td>{{ p.beneficiary_name or "—" }}</td>
-            <td class="cell-ref">{{ p.reference_text[:80] if p.reference_text else "—" }}{{ "…" if p.reference_text and p.reference_text|length > 80 }}</td>
-            <td>{{ "%.0f%%"|format(p.match_score * 100) if p.match_score else "—" }}</td>
-            <td class="cell-note" title="{{ p.remark or '' }}">{{ p.remark[:80] if p.remark else "—" }}{{ "…" if p.remark and p.remark|length > 80 }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card">
+    <p class="page-kicker">Verknüpfungen</p>
+    <h2>Zugeordnete Zahlungen ({{ payments | length }})</h2>
+    <p class="page-desc" style="margin-bottom: 16px;">Direkter Einstieg in alle bereits mit dieser Rechnung verbundenen Zahlungseinträge.</p>
+    <div class="table-responsive">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Quelle</th>
+                <th>Buchungsdatum</th>
+                <th>Betrag</th>
+                <th>Absender</th>
+                <th>Verwendungszweck</th>
+                <th>Score</th>
+                <th>Bemerkung Zahlung</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in payments %}
+            {% set payment_link_id = p.parent_payment_id if p.parent_payment_id else p.payment_id %}
+            <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=payment_link_id) }}'">
+                <td>{{ payment_link_id }}</td>
+                <td><span class="badge">{{ p.source or "—" }}</span></td>
+                <td>{{ p.booking_date | format_date }}</td>
+                <td class="cell-amount">{{ p.amount_eur | format_eur }}</td>
+                <td>{{ p.beneficiary_name or "—" }}</td>
+                <td class="cell-ref">{{ p.reference_text[:80] if p.reference_text else "—" }}{{ "…" if p.reference_text and p.reference_text|length > 80 }}</td>
+                <td>{{ "%.0f%%"|format(p.match_score * 100) if p.match_score else "—" }}</td>
+                <td class="cell-note" title="{{ p.remark or '' }}">{{ p.remark[:80] if p.remark else "—" }}{{ "…" if p.remark and p.remark|length > 80 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
 </div>
 {% else %}
 <div class="empty-state">
@@ -208,36 +244,39 @@
 {% endif %}
 
 {% if audit %}
-<h2>Audit-Log</h2>
-<div class="table-responsive">
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Nr.</th>
-            <th>Zahlung</th>
-            <th>Score</th>
-            <th>Regel</th>
-            <th>Zeitpunkt</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for log in audit %}
-        <tr>
-            <td>{{ log.audit_id }}</td>
-            <td>
-                {% if log.payment_id %}
-                <a href="{{ url_for('zahlung_detail', payment_id=log.payment_id) }}">{{ log.payment_id }}</a>
-                {% else %}
-                —
-                {% endif %}
-            </td>
-            <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
-            <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
-            <td>{{ log.ts | format_date }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card">
+    <p class="page-kicker">Chronik</p>
+    <h2>Audit-Log</h2>
+    <div class="table-responsive">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Nr.</th>
+                <th>Zahlung</th>
+                <th>Score</th>
+                <th>Regel</th>
+                <th>Zeitpunkt</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in audit %}
+            <tr>
+                <td>{{ log.audit_id }}</td>
+                <td>
+                    {% if log.payment_id %}
+                    <a href="{{ url_for('zahlung_detail', payment_id=log.payment_id) }}">{{ log.payment_id }}</a>
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
+                <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
+                <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
+                <td>{{ log.ts | format_date }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
 </div>
 {% endif %}
 {% endblock %}

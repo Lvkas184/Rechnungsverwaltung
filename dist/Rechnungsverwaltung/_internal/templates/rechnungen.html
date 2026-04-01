@@ -2,7 +2,15 @@
 {% block title %}Rechnungen — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
-<h1>📄 Rechnungen <span class="count-badge">{{ total }}</span></h1>
+<div class="page-hero">
+    <div>
+        <p class="page-kicker">Rechnungen</p>
+        <h1>Rechnungen <span class="count-badge">{{ total }}</span></h1>
+        <p class="page-desc">
+            Durchsuchen, filtern und prüfen Sie den gesamten Rechnungsbestand inklusive Status, Mahnstufe, Mahnungsdatum und Bemerkungen.
+        </p>
+    </div>
+</div>
 
 <div class="filter-bar">
     <form method="GET" action="{{ url_for('rechnungen') }}" class="filter-form">
@@ -32,60 +40,64 @@
 </div>
 
 {% if invoices %}
-<div class="table-responsive">
-<table class="data-table rechnungen-table">
-    <thead>
-        {% macro sort_link(col_id, label) %}
-            {% set new_order = 'asc' if sort_col != col_id or order == 'desc' else 'desc' %}
-            {% set arrow = ' ↑' if sort_col == col_id and order == 'asc' else (' ↓' if sort_col == col_id and order == 'desc' else '') %}
-            <a href="{{ url_for('rechnungen', page=page, status=status_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between;">
-                {{ label }}<span style="font-size: 0.8em; color: #888;">{{ arrow }}</span>
-            </a>
-        {% endmacro %}
-        <tr>
-            <th class="col-invoice">{{ sort_link('invoice_id', 'Rechnungs-Nr.') }}</th>
-            <th class="col-name">{{ sort_link('name', 'Name') }}</th>
-            <th class="col-amount">{{ sort_link('amount_gross', 'Betrag (Brutto)') }}</th>
-            <th class="col-paid">{{ sort_link('paid_sum_eur', 'Bezahlt') }}</th>
-            <th class="col-deviation">{{ sort_link('deviation_eur', 'Abweichung') }}</th>
-            <th class="col-status">{{ sort_link('status', 'Status') }}</th>
-            <th class="col-reminder">{{ sort_link('reminder_status', 'Mahnung') }}</th>
-            <th class="col-reminder-date">{{ sort_link('reminder_date', 'Mahnungsdatum') }}</th>
-            <th class="col-remark">{{ sort_link('remark', 'Bemerkung') }}</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for inv in invoices %}
-        <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}'">
-            <td class="cell-id col-invoice">{{ inv.invoice_id }}</td>
-            <td class="cell-name col-name">{{ inv.name or "—" }}</td>
-            <td class="cell-amount col-amount">{{ inv.amount_gross | format_eur }}</td>
-            <td class="cell-amount col-paid">{{ inv.paid_sum_eur | format_eur }}</td>
-            <td class="cell-amount col-deviation">{{ inv.deviation_eur | format_eur }}</td>
-            <td class="col-status">
-                <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
-                    {{ inv.status or "Offen" }}
-                </span>
-                {% if inv.status_manual %}
-                <span class="badge">manuell</span>
-                {% endif %}
-            </td>
-            <td class="col-reminder">
-                {% if inv.reminder_status %}
-                <span class="mahnung-badge">{{ inv.reminder_status }}</span>
-                {% else %}
-                —
-                {% endif %}
-            </td>
-            <td class="col-reminder-date">
-                {{ inv.reminder_date | format_date if inv.reminder_date else "—" }}
-            </td>
-            <td class="cell-note col-remark" title="{{ inv.remark or '' }}">{{ inv.remark[:160] if inv.remark else "—" }}{{ "…" if inv.remark and inv.remark|length > 160 }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-</div>
+<div class="card">
+    <p class="page-kicker">Liste</p>
+    <h2>Rechnungsübersicht</h2>
+    <p class="page-desc" style="margin-bottom: 16px;">Sortierung, Statusfilter und Paginierung bleiben vollständig erhalten.</p>
+    <div class="table-responsive">
+    <table class="data-table rechnungen-table">
+        <thead>
+            {% macro sort_link(col_id, label) %}
+                {% set new_order = 'asc' if sort_col != col_id or order == 'desc' else 'desc' %}
+                {% set arrow = ' ↑' if sort_col == col_id and order == 'asc' else (' ↓' if sort_col == col_id and order == 'desc' else '') %}
+                <a href="{{ url_for('rechnungen', page=page, status=status_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between;">
+                    {{ label }}<span style="font-size: 0.8em; color: #888;">{{ arrow }}</span>
+                </a>
+            {% endmacro %}
+            <tr>
+                <th class="col-invoice">{{ sort_link('invoice_id', 'Rechnungs-Nr.') }}</th>
+                <th class="col-name">{{ sort_link('name', 'Name') }}</th>
+                <th class="col-amount">{{ sort_link('amount_gross', 'Betrag (Brutto)') }}</th>
+                <th class="col-paid">{{ sort_link('paid_sum_eur', 'Bezahlt') }}</th>
+                <th class="col-deviation">{{ sort_link('deviation_eur', 'Abweichung') }}</th>
+                <th class="col-status">{{ sort_link('status', 'Status') }}</th>
+                <th class="col-reminder">{{ sort_link('reminder_status', 'Mahnung') }}</th>
+                <th class="col-reminder-date">{{ sort_link('reminder_date', 'Mahnungsdatum') }}</th>
+                <th class="col-remark">{{ sort_link('remark', 'Bemerkung') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inv in invoices %}
+            <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}'">
+                <td class="cell-id col-invoice">{{ inv.invoice_id }}</td>
+                <td class="cell-name col-name">{{ inv.name or "—" }}</td>
+                <td class="cell-amount col-amount">{{ inv.amount_gross | format_eur }}</td>
+                <td class="cell-amount col-paid">{{ inv.paid_sum_eur | format_eur }}</td>
+                <td class="cell-amount col-deviation">{{ inv.deviation_eur | format_eur }}</td>
+                <td class="col-status">
+                    <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
+                        {{ inv.status or "Offen" }}
+                    </span>
+                    {% if inv.status_manual %}
+                    <span class="badge">manuell</span>
+                    {% endif %}
+                </td>
+                <td class="col-reminder">
+                    {% if inv.reminder_status %}
+                    <span class="mahnung-badge">{{ inv.reminder_status }}</span>
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
+                <td class="col-reminder-date">
+                    {{ inv.reminder_date | format_date if inv.reminder_date else "—" }}
+                </td>
+                <td class="cell-note col-remark" title="{{ inv.remark or '' }}">{{ inv.remark[:160] if inv.remark else "—" }}{{ "…" if inv.remark and inv.remark|length > 160 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
 
 {% if total_pages > 1 %}
 <div class="pagination" style="display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
@@ -114,6 +126,7 @@
     <a href="{{ url_for('rechnungen', page=total_pages, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Letzte Seite">Letzte »</a>
 </div>
 {% endif %}
+</div>
 
 {% else %}
 <div class="empty-state">

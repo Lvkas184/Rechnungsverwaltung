@@ -2,7 +2,15 @@
 {% block title %}Zahlungen — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
-<h1>💳 Zahlungen <span class="count-badge">{{ total }}</span></h1>
+<div class="page-hero">
+    <div>
+        <p class="page-kicker">Zahlungen</p>
+        <h1>Zahlungen <span class="count-badge">{{ total }}</span></h1>
+        <p class="page-desc">
+            Prüfen Sie Bankimporte, filtern Sie nach Status und Quelle und springen Sie direkt in die jeweilige Zahlung oder Rechnung.
+        </p>
+    </div>
+</div>
 
 <div class="filter-bar">
     <form method="GET" action="{{ url_for('zahlungen') }}" class="filter-form">
@@ -41,69 +49,73 @@
 </div>
 
 {% if payments %}
-<div class="table-responsive">
-<table class="data-table zahlungen-table">
-    <thead>
-        {% macro sort_link(col_id, label) %}
-            {% set new_order = 'asc' if sort_col != col_id or order == 'desc' else 'desc' %}
-            {% set arrow = ' ↑' if sort_col == col_id and order == 'asc' else (' ↓' if sort_col == col_id and order == 'desc' else '') %}
-            <a href="{{ url_for('zahlungen', page=page, filter=filter_type, show=show_type, bank=bank_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between;">
-                {{ label }}<span style="font-size: 0.8em; color: #888;">{{ arrow }}</span>
-            </a>
-        {% endmacro %}
-        <tr>
-            <th class="col-id">{{ sort_link('payment_id', 'ID') }}</th>
-            <th class="col-source">{{ sort_link('source', 'Quelle') }}</th>
-            <th class="col-date">{{ sort_link('booking_date', 'Buchungsdatum') }}</th>
-            <th class="col-amount">{{ sort_link('amount_eur', 'Betrag') }}</th>
-            <th class="col-sender">{{ sort_link('beneficiary_name', 'Absender') }}</th>
-            <th class="col-ref">{{ sort_link('reference_text', 'Verwendungszweck') }}</th>
-            <th class="col-invoice">{{ sort_link('invoice_id', 'Rechnung') }}</th>
-            <th class="col-status">{{ sort_link('matched', 'Status') }}</th>
-            <th class="col-remark">{{ sort_link('remark', 'Bemerkung') }}</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for p in payments %}
-        {% set eff_status = payment_effective_status(p) %}
-        <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=p.payment_id) }}'">
-            <td class="col-id">{{ p.payment_id }}</td>
-            <td class="col-source"><span class="badge">{{ p.source or "—" }}</span></td>
-            <td class="col-date">{{ p.booking_date | format_date }}</td>
-            <td class="cell-amount col-amount" style="color: {{ 'inherit' if p.amount_eur > 0 else '#dc2626' }};">
-                {{ p.amount_eur | format_eur }}
-            </td>
-            <td class="cell-sender col-sender">{{ p.beneficiary_name or "—" }}</td>
-            <td class="cell-ref col-ref">{{ p.reference_text[:80] if p.reference_text else "—" }}{{ "…" if p.reference_text and p.reference_text|length > 80 }}</td>
-            <td class="col-invoice">
-                {% if p.invoice_id %}
-                <a href="{{ url_for('rechnung_detail', invoice_id=p.invoice_id) }}">{{ p.invoice_id }}</a>
-                {% elif p.match_rule and p.match_rule.startswith('split_') %}
-                Mehrfach
-                {% else %}
-                —
-                {% endif %}
-            </td>
-            <td class="col-status">
-                {% if eff_status == 'Zugeordnet' %}
-                <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
-                {% elif eff_status == 'Akonto' %}
-                <span class="status-badge status-akonto">🟠 Akonto</span>
-                {% elif eff_status == 'Schadensrechnungen' %}
-                <span class="status-badge status-schadensrechnungen">🟣 Schadensrechnungen</span>
-                {% else %}
-                <span class="status-badge status-offen">Offen</span>
-                {% endif %}
-                {% if p.status_manual %}
-                <span class="badge">manuell</span>
-                {% endif %}
-            </td>
-            <td class="cell-note col-remark" title="{{ p.remark or '' }}">{{ p.remark[:160] if p.remark else "—" }}{{ "…" if p.remark and p.remark|length > 160 }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-</div>
+<div class="card">
+    <p class="page-kicker">Bankdaten</p>
+    <h2>Zahlungsübersicht</h2>
+    <p class="page-desc" style="margin-bottom: 16px;">Alle bisherigen Such-, Bank- und Statusfilter bleiben unverändert verfügbar.</p>
+    <div class="table-responsive">
+    <table class="data-table zahlungen-table">
+        <thead>
+            {% macro sort_link(col_id, label) %}
+                {% set new_order = 'asc' if sort_col != col_id or order == 'desc' else 'desc' %}
+                {% set arrow = ' ↑' if sort_col == col_id and order == 'asc' else (' ↓' if sort_col == col_id and order == 'desc' else '') %}
+                <a href="{{ url_for('zahlungen', page=page, filter=filter_type, show=show_type, bank=bank_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between;">
+                    {{ label }}<span style="font-size: 0.8em; color: #888;">{{ arrow }}</span>
+                </a>
+            {% endmacro %}
+            <tr>
+                <th class="col-id">{{ sort_link('payment_id', 'ID') }}</th>
+                <th class="col-source">{{ sort_link('source', 'Quelle') }}</th>
+                <th class="col-date">{{ sort_link('booking_date', 'Buchungsdatum') }}</th>
+                <th class="col-amount">{{ sort_link('amount_eur', 'Betrag') }}</th>
+                <th class="col-sender">{{ sort_link('beneficiary_name', 'Absender') }}</th>
+                <th class="col-ref">{{ sort_link('reference_text', 'Verwendungszweck') }}</th>
+                <th class="col-invoice">{{ sort_link('invoice_id', 'Rechnung') }}</th>
+                <th class="col-status">{{ sort_link('matched', 'Status') }}</th>
+                <th class="col-remark">{{ sort_link('remark', 'Bemerkung') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in payments %}
+            {% set eff_status = payment_effective_status(p) %}
+            <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=p.payment_id) }}'">
+                <td class="col-id">{{ p.payment_id }}</td>
+                <td class="col-source"><span class="badge">{{ p.source or "—" }}</span></td>
+                <td class="col-date">{{ p.booking_date | format_date }}</td>
+                <td class="cell-amount col-amount" style="color: {{ 'inherit' if p.amount_eur > 0 else '#dc2626' }};">
+                    {{ p.amount_eur | format_eur }}
+                </td>
+                <td class="cell-sender col-sender">{{ p.beneficiary_name or "—" }}</td>
+                <td class="cell-ref col-ref">{{ p.reference_text[:80] if p.reference_text else "—" }}{{ "…" if p.reference_text and p.reference_text|length > 80 }}</td>
+                <td class="col-invoice">
+                    {% if p.invoice_id %}
+                    <a href="{{ url_for('rechnung_detail', invoice_id=p.invoice_id) }}">{{ p.invoice_id }}</a>
+                    {% elif p.match_rule and p.match_rule.startswith('split_') %}
+                    Mehrfach
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
+                <td class="col-status">
+                    {% if eff_status == 'Zugeordnet' %}
+                    <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
+                    {% elif eff_status == 'Akonto' %}
+                    <span class="status-badge status-akonto">🟠 Akonto</span>
+                    {% elif eff_status == 'Schadensrechnungen' %}
+                    <span class="status-badge status-schadensrechnungen">🟣 Schadensrechnungen</span>
+                    {% else %}
+                    <span class="status-badge status-offen">Offen</span>
+                    {% endif %}
+                    {% if p.status_manual %}
+                    <span class="badge">manuell</span>
+                    {% endif %}
+                </td>
+                <td class="cell-note col-remark" title="{{ p.remark or '' }}">{{ p.remark[:160] if p.remark else "—" }}{{ "…" if p.remark and p.remark|length > 160 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
 
 {% if total_pages > 1 %}
 <div class="pagination" style="display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
@@ -134,6 +146,7 @@
     <a href="{{ url_for('zahlungen', page=total_pages, filter=filter_type, show=show_type, bank=bank_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Letzte Seite">Letzte »</a>
 </div>
 {% endif %}
+</div>
 
 {% else %}
 <div class="empty-state">

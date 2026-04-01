@@ -2,12 +2,17 @@
 {% block title %}CSV Import — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
-<h1>📤 Daten importieren</h1>
-<p class="page-desc">Wählen Sie den Dateityp und laden Sie Ihre CSV-Datei hoch.</p>
+<div class="page-hero">
+    <div>
+        <p class="page-kicker">Import</p>
+        <h1>Daten importieren</h1>
+        <p class="page-desc">Wählen Sie die passende Datenquelle und laden Sie Ihre Datei hoch. Die bestehende Import-Logik und Historie bleiben unverändert.</p>
+    </div>
+</div>
 
 <div class="upload-grid">
     <!-- Rechnungen -->
-    <div class="upload-card">
+    <div class="upload-card upload-card-invoices">
         <div class="upload-icon">📄</div>
         <h2>Rechnungen</h2>
         <p>CSV mit neuen Rechnungen importieren</p>
@@ -24,7 +29,7 @@
     </div>
 
     <!-- Sparkasse -->
-    <div class="upload-card">
+    <div class="upload-card upload-card-sparkasse">
         <div class="upload-icon">🏦</div>
         <h2>Sparkasse</h2>
         <p>Kontoauszug der Sparkasse importieren</p>
@@ -41,7 +46,7 @@
     </div>
 
     <!-- VoBa Kraichgau -->
-    <div class="upload-card">
+    <div class="upload-card upload-card-kraichgau">
         <div class="upload-icon">🏦</div>
         <h2>VoBa Kraichgau</h2>
         <p>Kontoauszug VoBa Kraichgau importieren</p>
@@ -58,7 +63,7 @@
     </div>
 
     <!-- VoBa Pur -->
-    <div class="upload-card">
+    <div class="upload-card upload-card-pur">
         <div class="upload-icon">🏦</div>
         <h2>VoBa Pur</h2>
         <p>Kontoauszug VoBa Pur importieren</p>
@@ -75,8 +80,13 @@
     </div>
 </div>
 
-<h2>Import-Historie</h2>
-<p class="page-desc">Jeder Import wird protokolliert und kann einzeln zurückgenommen werden, solange keine späteren abhängigen Änderungen dagegen sprechen.</p>
+<div class="page-hero" style="margin-top: 34px; margin-bottom: 18px;">
+    <div>
+        <p class="page-kicker">Historie</p>
+        <h2>Import-Historie</h2>
+        <p class="page-desc">Jeder Import wird protokolliert und kann einzeln zurückgenommen werden, solange keine späteren abhängigen Änderungen dagegen sprechen.</p>
+    </div>
+</div>
 
 {% if import_batches %}
 <div class="import-history-list">

@@ -9,24 +9,67 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="app-shell">
     <nav class="main-nav">
         <div class="nav-inner">
-            <a href="{{ url_for('dashboard') }}" class="nav-logo">📋 Rechnungsverwaltung</a>
+            <a href="{{ url_for('dashboard') }}" class="nav-logo">
+                <span class="nav-logo-mark material-symbols-outlined">account_balance</span>
+                <span class="nav-logo-copy">
+                    <strong>Rechnungsverwaltung</strong>
+                    
+            </a>
             <div class="nav-links">
-                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">🏠 Übersicht</a>
-                <a href="{{ url_for('rechnungen') }}" class="nav-link {% if request.endpoint in ('rechnungen', 'rechnung_detail') %}active{% endif %}">📄 Rechnungen</a>
-                <a href="{{ url_for('zahlungen') }}" class="nav-link {% if request.endpoint == 'zahlungen' %}active{% endif %}">💳 Zahlungen</a>
-                <a href="{{ url_for('upload') }}" class="nav-link {% if request.endpoint == 'upload' %}active{% endif %}">📤 Import</a>
-                <a href="{{ url_for('zuordnungen') }}" class="nav-link {% if request.endpoint == 'zuordnungen' %}active{% endif %}">🔗 Zuordnungen</a>
-                <a href="{{ url_for('einstellungen') }}" class="nav-link {% if request.endpoint == 'einstellungen' %}active{% endif %}">⚙️ Einstellungen</a>
-                <form action="{{ url_for('shutdown') }}" method="POST" style="display:inline; margin-left: 10px;">
-                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Möchten Sie das Programm wirklich beenden?')">🛑 Beenden</button>
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <span class="nav-link-icon material-symbols-outlined">dashboard</span>
+                    <span>Übersicht</span>
+                </a>
+                <a href="{{ url_for('rechnungen') }}" class="nav-link {% if request.endpoint in ('rechnungen', 'rechnung_detail') %}active{% endif %}">
+                    <span class="nav-link-icon material-symbols-outlined">description</span>
+                    <span>Rechnungen</span>
+                </a>
+                <a href="{{ url_for('zahlungen') }}" class="nav-link {% if request.endpoint in ('zahlungen', 'zahlung_detail') %}active{% endif %}">
+                    <span class="nav-link-icon material-symbols-outlined">payments</span>
+                    <span>Zahlungen</span>
+                </a>
+                <a href="{{ url_for('upload') }}" class="nav-link {% if request.endpoint == 'upload' %}active{% endif %}">
+                    <span class="nav-link-icon material-symbols-outlined">file_upload</span>
+                    <span>Import</span>
+                </a>
+                <a href="{{ url_for('zuordnungen') }}" class="nav-link {% if request.endpoint == 'zuordnungen' %}active{% endif %}">
+                    <span class="nav-link-icon material-symbols-outlined">assignment_turned_in</span>
+                    <span>Zuordnungen</span>
+                </a>
+                <a href="{{ url_for('einstellungen') }}" class="nav-link {% if request.endpoint == 'einstellungen' %}active{% endif %}">
+                    <span class="nav-link-icon material-symbols-outlined">settings</span>
+                    <span>Einstellungen</span>
+                </a>
+            </div>
+            <div class="nav-footer">
+                <p class="nav-footer-text">Lokale Desktop-App mit eigener Datenhaltung</p>
+                <form action="{{ url_for('shutdown') }}" method="POST">
+                    <button type="submit" class="btn btn-danger nav-exit-btn" onclick="return confirm('Möchten Sie das Programm wirklich beenden?')">
+                        <span class="material-symbols-outlined">logout</span>
+                        <span>Beenden</span>
+                    </button>
                 </form>
+                <a href="{{ url_for('migration') }}" class="nav-footer-link">Alt-Daten Import</a>
             </div>
         </div>
     </nav>
+
+    <div class="app-main">
+    <header class="app-topbar">
+        <div>
+            <p class="app-topbar-kicker">Rechnungen, Zahlungen und Mahnungen</p>
+            <p class="app-topbar-title">Lokale Finanzverwaltung für den Tagesbetrieb</p>
+        </div>
+        <div class="app-topbar-meta">
+            <span class="topbar-pill">Desktop-Modus</span>
+        </div>
+    </header>
 
     <main class="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -46,8 +89,10 @@
     </main>
 
     <footer class="main-footer">
-        <p>Rechnungsverwaltung &copy; 2026 | <a href="{{ url_for('migration') }}" style="color: #ccc; text-decoration: none; font-size: 0.9em;">Alt-Daten Import</a></p>
+        <p>Rechnungsverwaltung &copy; 2026</p>
     </footer>
+    </div>
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

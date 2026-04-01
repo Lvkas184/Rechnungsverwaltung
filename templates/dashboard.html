@@ -2,47 +2,90 @@
 {% block title %}Übersicht — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
-<h1>Übersicht</h1>
+<div class="page-hero">
+    <div>
+        <p class="page-kicker">Dashboard</p>
+        <h1>Übersicht</h1>
+        <p class="page-desc">
+            Zentrale Sicht auf offene Rechnungen, Mahnstände, nicht zugeordnete Zahlungen und die letzten Systemaktivitäten.
+        </p>
+    </div>
+</div>
 
 <div class="stats-grid">
     <div class="stat-card stat-open">
+        <div class="stat-card-top">
+            <div class="stat-label">Offene Rechnungen</div>
+            <div class="stat-icon material-symbols-outlined">pending_actions</div>
+        </div>
         <div class="stat-number">{{ stats.open_invoices }}</div>
-        <div class="stat-label">Offene Rechnungen</div>
+        <div class="stat-helper">Aktuell nicht vollständig ausgeglichen</div>
     </div>
     <div class="stat-card stat-partial">
+        <div class="stat-card-top">
+            <div class="stat-label">Teiloffen</div>
+            <div class="stat-icon material-symbols-outlined">difference</div>
+        </div>
         <div class="stat-number">{{ stats.partial_invoices }}</div>
-        <div class="stat-label">Teiloffen</div>
+        <div class="stat-helper">Bereits mit Teilzahlung oder Unterdeckung</div>
     </div>
     <div class="stat-card stat-paid">
+        <div class="stat-card-top">
+            <div class="stat-label">Bezahlt</div>
+            <div class="stat-icon material-symbols-outlined">check_circle</div>
+        </div>
         <div class="stat-number">{{ stats.paid_invoices }}</div>
-        <div class="stat-label">Bezahlt</div>
+        <div class="stat-helper">Inklusive bezahlt mit Mahngebühr</div>
     </div>
     <div class="stat-card stat-over">
+        <div class="stat-card-top">
+            <div class="stat-label">Überzahlung</div>
+            <div class="stat-icon material-symbols-outlined">north</div>
+        </div>
         <div class="stat-number">{{ stats.overpaid_invoices }}</div>
-        <div class="stat-label">Überzahlung</div>
+        <div class="stat-helper">Prüfbedarf bei überzahlten Rechnungen</div>
     </div>
-</div>
-
-<div class="stats-grid stats-grid-secondary">
     <div class="stat-card stat-neutral">
+        <div class="stat-card-top">
+            <div class="stat-label">Offener Betrag gesamt</div>
+            <div class="stat-icon material-symbols-outlined">account_balance_wallet</div>
+        </div>
         <div class="stat-number">{{ stats.open_sum | format_eur }}</div>
-        <div class="stat-label">Offener Betrag gesamt</div>
-    </div>
-    <div class="stat-card stat-neutral">
-        <div class="stat-number">{{ stats.unmatched_payments }}</div>
-        <div class="stat-label">Nicht zugeordnete Zahlungen</div>
+        <div class="stat-helper">Summe aller noch offenen Abweichungen</div>
     </div>
     <div class="stat-card stat-warn">
+        <div class="stat-card-top">
+            <div class="stat-label">Mahnungen</div>
+            <div class="stat-icon material-symbols-outlined">notification_important</div>
+        </div>
         <div class="stat-number">{{ stats.mahnung_1 + stats.mahnung_2 + stats.mahnung_3 }}</div>
-        <div class="stat-label">Mahnungen ({{ stats.mahnung_1 }}× erste, {{ stats.mahnung_2 }}× zweite, {{ stats.mahnung_3 }}× dritte)</div>
+        <div class="stat-helper">{{ stats.mahnung_1 }}× erste, {{ stats.mahnung_2 }}× zweite, {{ stats.mahnung_3 }}× dritte Mahnung</div>
     </div>
     <div class="stat-card stat-neutral">
+        <div class="stat-card-top">
+            <div class="stat-label">Nicht zugeordnet</div>
+            <div class="stat-icon material-symbols-outlined">link_off</div>
+        </div>
+        <div class="stat-number">{{ stats.unmatched_payments }}</div>
+        <div class="stat-helper">Zahlungen ohne aktuelle Zuordnung</div>
+    </div>
+    <div class="stat-card stat-neutral">
+        <div class="stat-card-top">
+            <div class="stat-label">Rechnungen gesamt</div>
+            <div class="stat-icon material-symbols-outlined">receipt_long</div>
+        </div>
         <div class="stat-number">{{ stats.total_invoices }}</div>
-        <div class="stat-label">Rechnungen gesamt</div>
+        <div class="stat-helper">Aktueller Bestand in der Datenbank</div>
     </div>
 </div>
 
-<h2>Aktionen</h2>
+<div class="page-hero" style="margin-top: 34px; margin-bottom: 18px;">
+    <div>
+        <p class="page-kicker">Aktionen</p>
+        <h2>Tagesgeschäft</h2>
+        <p class="page-desc">Die wichtigsten Verarbeitungsschritte bleiben direkt erreichbar und unverändert bedienbar.</p>
+    </div>
+</div>
 <div class="action-buttons">
     <form method="POST" action="{{ url_for('run_matching_action') }}" class="action-form">
         <button type="submit" class="btn btn-primary btn-large" onclick="return confirm('Matching jetzt ausführen?')">
@@ -65,36 +108,46 @@
 </div>
 
 {% if recent_audit %}
-<h2>Letzte Aktivitäten</h2>
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Nr.</th>
-            <th>Zahlung</th>
-            <th>Rechnung</th>
-            <th>Score</th>
-            <th>Regel</th>
-            <th>Zeitpunkt</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for log in recent_audit %}
-        <tr>
-            <td>{{ log.audit_id }}</td>
-            <td>{{ log.payment_id or "—" }}</td>
-            <td>
-                {% if log.invoice_id %}
-                <a href="{{ url_for('rechnung_detail', invoice_id=log.invoice_id) }}">{{ log.invoice_id }}</a>
-                {% else %}
-                —
-                {% endif %}
-            </td>
-            <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
-            <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
-            <td>{{ log.ts | format_date }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card" style="margin-top: 34px;">
+    <div class="page-hero" style="margin-bottom: 16px;">
+        <div>
+            <p class="page-kicker">Chronik</p>
+            <h2>Letzte Aktivitäten</h2>
+            <p class="page-desc">Die jüngsten Matching- und Zuordnungsereignisse aus dem Audit-Log.</p>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Nr.</th>
+                    <th>Zahlung</th>
+                    <th>Rechnung</th>
+                    <th>Score</th>
+                    <th>Regel</th>
+                    <th>Zeitpunkt</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in recent_audit %}
+                <tr>
+                    <td>{{ log.audit_id }}</td>
+                    <td>{{ log.payment_id or "—" }}</td>
+                    <td>
+                        {% if log.invoice_id %}
+                        <a href="{{ url_for('rechnung_detail', invoice_id=log.invoice_id) }}">{{ log.invoice_id }}</a>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
+                    <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
+                    <td>{{ log.ts | format_date }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endif %}
 {% endblock %}

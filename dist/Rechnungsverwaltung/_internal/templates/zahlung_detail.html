@@ -3,9 +3,45 @@
 
 {% block content %}
 {% set eff_status = payment_effective_status(pay) %}
-<div class="detail-header">
-    <a href="{{ url_for('zahlungen') }}" class="btn btn-secondary">← Zurück</a>
-    <h1>Zahlung #{{ pay.payment_id }}</h1>
+<div class="page-hero">
+    <div>
+        <p class="page-kicker">Zahlungsdetail</p>
+        <div class="detail-header" style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+            <a href="{{ url_for('zahlungen') }}" class="btn btn-secondary">← Zurück</a>
+            <h1 style="margin-bottom: 0;">Zahlung #{{ pay.payment_id }}</h1>
+        </div>
+        <p class="page-desc">
+            Bankdaten, Verwendungszweck, aktueller Zuordnungsstand sowie manuelle Eingriffe für diese einzelne Zahlung.
+        </p>
+    </div>
+</div>
+
+<div class="metric-strip">
+    <div class="metric-card">
+        <span class="metric-card-label">Betrag</span>
+        <div class="metric-card-value">{{ pay.amount_eur | format_eur }}</div>
+        <div class="metric-card-caption">{{ pay.booking_date | format_date }} · {{ pay.source or "keine Quelle" }}</div>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">Status</span>
+        <div style="margin-top: 6px;">
+            {% if eff_status == 'Zugeordnet' %}
+            <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
+            {% elif eff_status == 'Akonto' %}
+            <span class="status-badge status-akonto">🟠 Akonto</span>
+            {% elif eff_status == 'Schadensrechnungen' %}
+            <span class="status-badge status-schadensrechnungen">🟣 Schadensrechnungen</span>
+            {% else %}
+            <span class="status-badge status-offen">Offen</span>
+            {% endif %}
+        </div>
+        <div class="metric-card-caption">{{ "Manuell" if pay.status_manual else "Automatisch" }}</div>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">Match Score</span>
+        <div class="metric-card-value">{{ "%.0f%%"|format(pay.match_score * 100) if pay.match_score else "—" }}</div>
+        <div class="metric-card-caption">{{ pay.match_rule or "Keine Regel gespeichert" }}</div>
+    </div>
 </div>
 
 <div class="detail-grid">
@@ -117,178 +153,189 @@
     </div>
 </div>
 
-<div class="card">
-    <h2>Bemerkung zur Zahlung</h2>
-    <form method="POST" action="{{ url_for('zahlung_update_bemerkung', payment_id=pay.payment_id) }}">
-        <div class="form-group" style="min-width: 100%;">
-            <label for="payment_remark">Bemerkung</label>
-            <textarea
-                id="payment_remark"
-                name="remark"
-                class="form-input"
-                rows="3"
-                placeholder="Optionaler Hinweis zur Zahlung…"
-            >{{ pay.remark or '' }}</textarea>
-        </div>
-        <button type="submit" class="btn btn-primary">💾 Bemerkung speichern</button>
-    </form>
-</div>
+<div class="detail-action-grid">
+    <div class="card">
+        <h2>Bemerkung zur Zahlung</h2>
+        <form method="POST" action="{{ url_for('zahlung_update_bemerkung', payment_id=pay.payment_id) }}">
+            <div class="form-group" style="min-width: 100%;">
+                <label for="payment_remark">Bemerkung</label>
+                <textarea
+                    id="payment_remark"
+                    name="remark"
+                    class="form-input"
+                    rows="3"
+                    placeholder="Optionaler Hinweis zur Zahlung…"
+                >{{ pay.remark or '' }}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Bemerkung speichern</button>
+        </form>
+    </div>
 
-<div class="card">
-    <h2>Status der Zahlung manuell setzen</h2>
-    <p class="page-desc">
-        Manuell gesetzte Zahlungs-Status bleiben bei "Matching starten" und "Status aktualisieren" erhalten.
-    </p>
-    <form method="POST" action="{{ url_for('zahlung_update_status', payment_id=pay.payment_id) }}" class="inline-form" style="margin-bottom: 12px;">
-        <div class="form-group">
-            <label for="payment_manual_status">Status</label>
-            <select id="payment_manual_status" name="status" class="form-input">
-                <option value="Offen" {{ 'selected' if eff_status == 'Offen' }}>Offen (Nicht zugeordnet)</option>
-                <option value="Zugeordnet" {{ 'selected' if eff_status == 'Zugeordnet' }}>Zugeordnet</option>
-                <option value="Akonto" {{ 'selected' if eff_status == 'Akonto' }}>Akonto</option>
-                <option value="Schadensrechnungen" {{ 'selected' if eff_status == 'Schadensrechnungen' }}>Schadensrechnungen</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary">💾 Status speichern</button>
-    </form>
-    <form method="POST" action="{{ url_for('zahlung_reset_status_auto', payment_id=pay.payment_id) }}">
-        <button type="submit" class="btn btn-secondary">↺ Status-Automatik aktivieren</button>
-    </form>
-</div>
+    <div class="card">
+        <h2>Status der Zahlung manuell setzen</h2>
+        <p class="page-desc">
+            Manuell gesetzte Zahlungs-Status bleiben bei "Matching starten" und "Status aktualisieren" erhalten.
+        </p>
+        <form method="POST" action="{{ url_for('zahlung_update_status', payment_id=pay.payment_id) }}" class="inline-form" style="margin-bottom: 12px;">
+            <div class="form-group">
+                <label for="payment_manual_status">Status</label>
+                <select id="payment_manual_status" name="status" class="form-input">
+                    <option value="Offen" {{ 'selected' if eff_status == 'Offen' }}>Offen (Nicht zugeordnet)</option>
+                    <option value="Zugeordnet" {{ 'selected' if eff_status == 'Zugeordnet' }}>Zugeordnet</option>
+                    <option value="Akonto" {{ 'selected' if eff_status == 'Akonto' }}>Akonto</option>
+                    <option value="Schadensrechnungen" {{ 'selected' if eff_status == 'Schadensrechnungen' }}>Schadensrechnungen</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Status speichern</button>
+        </form>
+        <form method="POST" action="{{ url_for('zahlung_reset_status_auto', payment_id=pay.payment_id) }}">
+            <button type="submit" class="btn btn-secondary">↺ Status-Automatik aktivieren</button>
+        </form>
+    </div>
 
-<div class="card">
-    <h2>Manuelle Zuordnung</h2>
-    <p class="page-desc">
-        Diese Aktionen überschreiben die aktuelle Zuordnung. Manuelle Zuordnungen bleiben bei
-        "Matching starten" und "Status aktualisieren" bestehen.
-    </p>
+    <div class="card">
+        <h2>Manuelle Zuordnung</h2>
+        <p class="page-desc">
+            Diese Aktionen überschreiben die aktuelle Zuordnung. Manuelle Zuordnungen bleiben bei
+            "Matching starten" und "Status aktualisieren" bestehen.
+        </p>
 
-    <form method="POST" action="{{ url_for('zahlung_manual_assign', payment_id=pay.payment_id) }}" class="inline-form" style="margin-bottom: 16px;">
-        <div class="form-group">
-            <label for="manual_invoice_id">Rechnung manuell setzen</label>
-            <input type="number" name="invoice_id" id="manual_invoice_id" class="form-input" placeholder="z.B. 260644" required>
-        </div>
-        <button type="submit" class="btn btn-primary">💾 Auf Rechnung zuordnen</button>
-    </form>
+        <form method="POST" action="{{ url_for('zahlung_manual_assign', payment_id=pay.payment_id) }}" class="inline-form" style="margin-bottom: 16px;">
+            <div class="form-group">
+                <label for="manual_invoice_id">Rechnung manuell setzen</label>
+                <input type="number" name="invoice_id" id="manual_invoice_id" class="form-input" placeholder="z.B. 260644" required>
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Auf Rechnung zuordnen</button>
+        </form>
 
-    <form method="POST" action="{{ url_for('zahlung_manual_split', payment_id=pay.payment_id) }}" class="inline-form" style="align-items: stretch; margin-bottom: 16px;">
-        <div class="form-group" style="flex: 2; min-width: 320px;">
-            <label for="manual_split_allocations">Zahlung auf mehrere Rechnungen aufteilen</label>
-            <textarea name="allocations" id="manual_split_allocations" class="form-input" rows="4" placeholder="Eine Zeile pro Zuordnung, Format: Rechnungsnummer=Betrag&#10;260643=381,69&#10;260644=61,70" required></textarea>
-        </div>
-        <button type="submit" class="btn btn-warning">🧩 Aufteilen und speichern</button>
-    </form>
+        <form method="POST" action="{{ url_for('zahlung_manual_split', payment_id=pay.payment_id) }}" class="inline-form" style="align-items: stretch; margin-bottom: 16px;">
+            <div class="form-group" style="flex: 2; min-width: 320px;">
+                <label for="manual_split_allocations">Zahlung auf mehrere Rechnungen aufteilen</label>
+                <textarea name="allocations" id="manual_split_allocations" class="form-input" rows="4" placeholder="Eine Zeile pro Zuordnung, Format: Rechnungsnummer=Betrag&#10;260643=381,69&#10;260644=61,70" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-warning">🧩 Aufteilen und speichern</button>
+        </form>
 
-    <form method="POST" action="{{ url_for('zahlung_manual_clear', payment_id=pay.payment_id) }}">
-        <button type="submit" class="btn btn-danger" onclick="return confirm('Aktuelle Zuordnung wirklich entfernen?')">🗑️ Zuordnung entfernen</button>
-    </form>
+        <form method="POST" action="{{ url_for('zahlung_manual_clear', payment_id=pay.payment_id) }}">
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Aktuelle Zuordnung wirklich entfernen?')">🗑️ Zuordnung entfernen</button>
+        </form>
+    </div>
 </div>
 
 {% if inv %}
-<h2>Details zur verknüpften Rechnung</h2>
-<div class="table-responsive">
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Rechnungs-Nr.</th>
-            <th>Name</th>
-            <th>Betrag (Brutto)</th>
-            <th>Status</th>
-            <th>Mahnung</th>
-            <th>Bemerkung</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}'">
-            <td class="cell-id">{{ inv.invoice_id }}</td>
-            <td>{{ inv.name or "—" }}</td>
-            <td class="cell-amount">{{ inv.amount_gross | format_eur }}</td>
-            <td>
-                <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
-                    {{ inv.status or "Offen" }}
-                </span>
-            </td>
-            <td>
-                {% if inv.reminder_status %}
-                <span class="mahnung-badge">{{ inv.reminder_status }}</span>
-                {% else %}
-                —
-                {% endif %}
-            </td>
-            <td class="cell-note" title="{{ inv.remark or '' }}">{{ inv.remark[:80] if inv.remark else "—" }}{{ "…" if inv.remark and inv.remark|length > 80 }}</td>
-        </tr>
-    </tbody>
-</table>
+<div class="card">
+    <p class="page-kicker">Verknüpfte Rechnung</p>
+    <h2>Details zur verknüpften Rechnung</h2>
+    <div class="table-responsive">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Rechnungs-Nr.</th>
+                <th>Name</th>
+                <th>Betrag (Brutto)</th>
+                <th>Status</th>
+                <th>Mahnung</th>
+                <th>Bemerkung</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}'">
+                <td class="cell-id">{{ inv.invoice_id }}</td>
+                <td>{{ inv.name or "—" }}</td>
+                <td class="cell-amount">{{ inv.amount_gross | format_eur }}</td>
+                <td>
+                    <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
+                        {{ inv.status or "Offen" }}
+                    </span>
+                </td>
+                <td>
+                    {% if inv.reminder_status %}
+                    <span class="mahnung-badge">{{ inv.reminder_status }}</span>
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
+                <td class="cell-note" title="{{ inv.remark or '' }}">{{ inv.remark[:80] if inv.remark else "—" }}{{ "…" if inv.remark and inv.remark|length > 80 }}</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
 </div>
 {% endif %}
 
 {% if split_invoices %}
-<h2>Aufgeteilte Rechnungen</h2>
-<div class="table-responsive">
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Rechnungs-Nr.</th>
-            <th>Name</th>
-            <th>Zugeordneter Anteil</th>
-            <th>Betrag (Brutto)</th>
-            <th>Status</th>
-            <th>Mahnung</th>
-            <th>Bemerkung</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for split in split_invoices %}
-        <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=split.invoice_id) }}'">
-            <td class="cell-id">{{ split.invoice_id }}</td>
-            <td>{{ split.invoice_name or "—" }}</td>
-            <td class="cell-amount">{{ split.amount_eur | format_eur }}</td>
-            <td class="cell-amount">{{ split.invoice_amount_gross | format_eur }}</td>
-            <td>
-                <span class="status-badge status-{{ split.invoice_status | status_class if split.invoice_status else 'offen' }}">
-                    {{ split.invoice_status or "Offen" }}
-                </span>
-            </td>
-            <td>
-                {% if split.invoice_reminder_status %}
-                <span class="mahnung-badge">{{ split.invoice_reminder_status }}</span>
-                {% else %}
-                —
-                {% endif %}
-            </td>
-            <td class="cell-note" title="{{ split.invoice_remark or '' }}">{{ split.invoice_remark[:80] if split.invoice_remark else "—" }}{{ "…" if split.invoice_remark and split.invoice_remark|length > 80 }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card">
+    <p class="page-kicker">Sammelzahlung</p>
+    <h2>Aufgeteilte Rechnungen</h2>
+    <div class="table-responsive">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Rechnungs-Nr.</th>
+                <th>Name</th>
+                <th>Zugeordneter Anteil</th>
+                <th>Betrag (Brutto)</th>
+                <th>Status</th>
+                <th>Mahnung</th>
+                <th>Bemerkung</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for split in split_invoices %}
+            <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=split.invoice_id) }}'">
+                <td class="cell-id">{{ split.invoice_id }}</td>
+                <td>{{ split.invoice_name or "—" }}</td>
+                <td class="cell-amount">{{ split.amount_eur | format_eur }}</td>
+                <td class="cell-amount">{{ split.invoice_amount_gross | format_eur }}</td>
+                <td>
+                    <span class="status-badge status-{{ split.invoice_status | status_class if split.invoice_status else 'offen' }}">
+                        {{ split.invoice_status or "Offen" }}
+                    </span>
+                </td>
+                <td>
+                    {% if split.invoice_reminder_status %}
+                    <span class="mahnung-badge">{{ split.invoice_reminder_status }}</span>
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
+                <td class="cell-note" title="{{ split.invoice_remark or '' }}">{{ split.invoice_remark[:80] if split.invoice_remark else "—" }}{{ "…" if split.invoice_remark and split.invoice_remark|length > 80 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
 </div>
 {% endif %}
 
 {% if audit %}
-<h2>Audit-Log (Chronik)</h2>
-<div class="table-responsive">
-<table class="data-table">
-    <thead>
-        <tr>
-            <th>Nr.</th>
-            <th>Zahlung</th>
-            <th>Score</th>
-            <th>Regel</th>
-            <th>Zeitpunkt</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for log in audit %}
-        <tr>
-            <td>{{ log.audit_id }}</td>
-            <td>{{ log.payment_id or "—" }}</td>
-            <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
-            <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
-            <td>{{ log.ts | format_date }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="card">
+    <p class="page-kicker">Chronik</p>
+    <h2>Audit-Log (Chronik)</h2>
+    <div class="table-responsive">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Nr.</th>
+                <th>Zahlung</th>
+                <th>Score</th>
+                <th>Regel</th>
+                <th>Zeitpunkt</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in audit %}
+            <tr>
+                <td>{{ log.audit_id }}</td>
+                <td>{{ log.payment_id or "—" }}</td>
+                <td>{{ "%.0f%%"|format(log.match_score * 100) if log.match_score else "—" }}</td>
+                <td><span class="badge">{{ log.rule_used or "—" }}</span></td>
+                <td>{{ log.ts | format_date }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
 </div>
 {% endif %}
 {% endblock %}

@@ -6,7 +6,7 @@
 	<dict>
 		<key>Resources/base_library.zip</key>
 		<data>
-		xfYXmy8+bbnVrzWdeLlunYAmp0I=
+		m0UxR2Y3/HAsQpGneqEVZFAkMCU=
 		</data>
 		<key>Resources/cryptography-46.0.6.dist-info/INSTALLER</key>
 		<data>
@@ -150,7 +150,7 @@
 		</data>
 		<key>Resources/static/style.css</key>
 		<data>
-		LeCpb91gucHF/p/BFEjyWIH5o0s=
+		D1FzhncTcQgIbL1zj912MxS9Zjg=
 		</data>
 		<key>Resources/templates/audit.html</key>
 		<data>
@@ -158,15 +158,15 @@
 		</data>
 		<key>Resources/templates/base.html</key>
 		<data>
-		WK2TshjCDG0S0EmNzBLNblJHeDo=
+		5cUzGzscemVQxPv2oQmN7Ks5QmU=
 		</data>
 		<key>Resources/templates/dashboard.html</key>
 		<data>
-		Yl0xT0uIZ7DCj84dBziGppC8Mt0=
+		QqYaU3R5ef0RJN+bw3sw7kxMX+A=
 		</data>
 		<key>Resources/templates/einstellungen.html</key>
 		<data>
-		+u07MORYU3YiyjlNhuiZnuD9g30=
+		Wgw6piXA6rAfPbJ66BwxJHS6fME=
 		</data>
 		<key>Resources/templates/migration.html</key>
 		<data>
@@ -174,27 +174,27 @@
 		</data>
 		<key>Resources/templates/rechnung_detail.html</key>
 		<data>
-		TYjG3C0DOgArfqRAFGWOgLg6No8=
+		olHdCuBvToXOBYFmmiGLSH2OzOg=
 		</data>
 		<key>Resources/templates/rechnungen.html</key>
 		<data>
-		tDa6ifft2jz19sqQnItqvknFHbA=
+		sDdBEFKSBkLeJI2ADiTKbxp6N6o=
 		</data>
 		<key>Resources/templates/upload.html</key>
 		<data>
-		vjvM7Gtvf/0bK5ztmNMInscJVYY=
+		TCcUkpzj5C4Q3h3ubrzI6vvNy3Y=
 		</data>
 		<key>Resources/templates/zahlung_detail.html</key>
 		<data>
-		uLb5YTZD5lKZYAhQzLm0TfKww+Q=
+		xMEuJ4JqhMOyuD3Kk2kI/CGM3JA=
 		</data>
 		<key>Resources/templates/zahlungen.html</key>
 		<data>
-		bSYDCfrLOmZ75LmMOmU68Sg1q4Y=
+		b7wcSUgerr5TnRilHmCicp01AXU=
 		</data>
 		<key>Resources/templates/zuordnungen.html</key>
 		<data>
-		FaytUc0FJwKhMOMr/yMZHWrOgTM=
+		9UuQO59nUNCwd/bDwKmnWR3AX/Q=
 		</data>
 		<key>Resources/werkzeug-3.1.7.dist-info/INSTALLER</key>
 		<data>
@@ -967,7 +967,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			zAh+KPrkY3R/iIRVCqBFSZgCrqNtiw5TslaysxtPITk=
+			Ay1kplZuitXgs3f79LQoALp3M3y0tSfmFOmoESwmHhA=
 			</data>
 		</dict>
 		<key>Resources/cryptography</key>
@@ -1244,7 +1244,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			w4xJ6Uza4YmfwDeU2tNviVRjM979n5D3ywxZrvk/JW0=
+			5j777jXv4oMXHc/mjebjZPsdMFW0XpISY0jrQKyY1WQ=
 			</data>
 		</dict>
 		<key>Resources/templates/audit.html</key>
@@ -1258,21 +1258,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			dDPLqQoAwMbpFhNLbeQRLZtyXgDWyVLVgDDhMmdh9Xk=
+			hjAr2KHCUb3MlzTzmzgVqHsKDCOMqoM2N7B+TjMV5JY=
 			</data>
 		</dict>
 		<key>Resources/templates/dashboard.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			0fMtzkJn6U+N5kAzSPt6PvX1IuFJFxGzK5vcqryhKGg=
+			AVutBVgVwMIC2S0Z7H8LcjWRgQjZboSJXf7hLNv6d6w=
 			</data>
 		</dict>
 		<key>Resources/templates/einstellungen.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			/+ee3sV/HZ4o8UmseguSF2IGSKXonau0vnUGocDMYZo=
+			dVFwFQ4mds+0ihow08liBmDH1gKR+6vKVNq5N8vITTU=
 			</data>
 		</dict>
 		<key>Resources/templates/migration.html</key>
@@ -1286,42 +1286,42 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			xBGoNzPS9xX0KYCqbZG1GOfD4V6Kjhms45EllMOkTMo=
+			Mol0jTuFYivyXqiPAtEn324T//vp25KicxxxU79BhXE=
 			</data>
 		</dict>
 		<key>Resources/templates/rechnungen.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			VzzVeQkdkmVpgY+fCThG6hwIs4dGhacmZf8veJoWCUY=
+			HtIDOqforWgfZGhlzXZBIIt8M12u7JNQL2nO+rOUdZ4=
 			</data>
 		</dict>
 		<key>Resources/templates/upload.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			gnXI5v8dRgdnf4mJefKCyicdHpmCgRRtpqAmVnwDxa4=
+			GlLlz+dVWRGYoh2j055FEPqdvngCMSk5wjrGbQJNCuw=
 			</data>
 		</dict>
 		<key>Resources/templates/zahlung_detail.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			sUhA0k/ZpK2XI3+Uvv9sbyZ0zDvIE2prVM25+SKuH20=
+			SxuZ7MVRs2F+q96JClqVIIN+F7vmU6AaBebiYGvpNKU=
 			</data>
 		</dict>
 		<key>Resources/templates/zahlungen.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			0NrprXSE1zX2Ux57TAqZsMO1Q4PVFady9chh6VG0Rd4=
+			5k4Yse+gH6MGzLkBRIXlCWEDZF8CsifpfhEQBrd/Bz0=
 			</data>
 		</dict>
 		<key>Resources/templates/zuordnungen.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			7s6O8oz84NXnj6Mi5EhZ0wZ5k90OY6iqdRap62fLCnk=
+			jUZjMGF4zBiOJuGo5g9+Pk//vXXv8aZcDoIXwFdAtZg=
 			</data>
 		</dict>
 		<key>Resources/werkzeug-3.1.7.dist-info/INSTALLER</key>
