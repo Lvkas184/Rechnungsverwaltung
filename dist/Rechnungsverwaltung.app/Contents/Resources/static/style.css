@@ -653,6 +653,88 @@ h2 {
     width: 100%;
 }
 
+.import-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.import-history-entry {
+    background: var(--color-surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.import-history-entry summary {
+    list-style: none;
+}
+
+.import-history-entry summary::-webkit-details-marker {
+    display: none;
+}
+
+.import-history-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    cursor: pointer;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.import-history-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    min-width: 0;
+}
+
+.import-history-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: var(--color-primary);
+    font-size: 0.95rem;
+    font-weight: 700;
+    transform: rotate(180deg);
+    transition: transform 0.2s ease;
+}
+
+.import-history-entry[open] .import-history-chevron {
+    transform: rotate(0deg);
+}
+
+.import-history-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.import-history-meta {
+    margin-top: 4px;
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+}
+
+.import-history-actions {
+    flex-shrink: 0;
+}
+
+.import-history-rolledback {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+}
+
+.import-history-details {
+    padding: 0 20px 20px;
+}
+
 /* ============================================================
    Detail View
    ============================================================ */
@@ -704,6 +786,27 @@ h2 {
 .detail-list dd {
     font-weight: 600;
     font-size: 1rem;
+    min-width: 0;
+}
+
+.reminder-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.reminder-history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    line-height: 1.25;
+}
+
+.reminder-history-item .mahnung-badge,
+.reminder-history-item .badge {
+    line-height: 1.2;
 }
 
 .full-width-detail {

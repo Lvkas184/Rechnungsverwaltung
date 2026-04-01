@@ -35,15 +35,75 @@ def _parse_float_param(value, default):
         return float(default)
 
 
-def compute_status_row(inv, tolerance, mahngebuehr_eur=0.0):
+def _extract_mahnstufe(reminder_status):
+    """Return Mahnstufe 1/2/3 from reminder_status text, else None."""
+    value = str(reminder_status or "").strip()
+    if value.startswith("1."):
+        return 1
+    if value.startswith("2."):
+        return 2
+    if value.startswith("3."):
+        return 3
+    return None
+
+
+def _pick_mahngebuehr(inv, fee_1, fee_2, fee_3):
+    """Choose expected fee based on invoice reminder status."""
+    reminder_status = None
+    try:
+        reminder_status = inv["reminder_status"]
+    except (TypeError, KeyError, IndexError):
+        if isinstance(inv, dict):
+            reminder_status = inv.get("reminder_status")
+
+    stufe = _extract_mahnstufe(reminder_status)
+    if stufe == 1:
+        return fee_1
+    if stufe == 2:
+        return fee_2
+    if stufe == 3:
+        return fee_3
+    return fee_1
+
+
+def _matches_mahngebuehr(inv, deviation, tolerance, fee_1, fee_2, fee_3):
+    """Match configured Mahngebuehr.
+
+    If a Mahnstufe is set on the invoice, only that exact stage fee matches.
+    If no Mahnstufe is set, accept any configured reminder fee as fallback.
+    """
+    reminder_status = None
+    try:
+        reminder_status = inv["reminder_status"]
+    except (TypeError, KeyError, IndexError):
+        if isinstance(inv, dict):
+            reminder_status = inv.get("reminder_status")
+
+    stufe = _extract_mahnstufe(reminder_status)
+    if stufe == 1:
+        candidate_fees = [fee_1]
+    elif stufe == 2:
+        candidate_fees = [fee_2]
+    elif stufe == 3:
+        candidate_fees = [fee_3]
+    else:
+        candidate_fees = [fee for fee in (fee_1, fee_2, fee_3) if fee > 0]
+
+    return any(abs(deviation - fee) <= tolerance for fee in candidate_fees)
+
+
+def compute_status_row(inv, tolerance, mahngebuehr_eur=0.0, mahngebuehr_2_eur=None, mahngebuehr_3_eur=None):
     """Compute status and deviation for a single invoice dict/Row."""
     invoice_id = None
     try:
         invoice_id = inv["invoice_id"]
-    except (TypeError, KeyError):
+    except (TypeError, KeyError, IndexError):
         if isinstance(inv, dict):
             invoice_id = inv.get("invoice_id")
 
+    fee_1 = max(0.0, _parse_float_param(mahngebuehr_eur, 0.0))
+    fee_2 = max(0.0, _parse_float_param(mahngebuehr_2_eur, fee_1)) if mahngebuehr_2_eur is not None else fee_1
+    fee_3 = max(0.0, _parse_float_param(mahngebuehr_3_eur, fee_2)) if mahngebuehr_3_eur is not None else fee_2
     paid = inv["paid_sum_eur"] or 0.0
     amount = inv["amount_gross"] or 0.0
     deviation = paid - amount
@@ -54,7 +114,7 @@ def compute_status_row(inv, tolerance, mahngebuehr_eur=0.0):
         status = "Offen"
     elif abs(deviation) <= tolerance:
         status = "Bezahlt"
-    elif deviation > tolerance and mahngebuehr_eur > 0 and abs(deviation - mahngebuehr_eur) <= tolerance:
+    elif deviation > tolerance and _matches_mahngebuehr(inv, deviation, tolerance, fee_1, fee_2, fee_3):
         status = "Bezahlt mit Mahngebühr"
     elif deviation > tolerance:
         status = "Überzahlung"
@@ -67,7 +127,15 @@ def update_all():
     """Recompute status and deviation_eur for every invoice in the DB."""
     params = load_params()
     tolerance = _parse_float_param(params.get("Toleranz", 0.001), 0.001)
-    mahngebuehr_eur = max(0.0, _parse_float_param(params.get("mahngebuehr_eur", 0.0), 0.0))
+    fee_1 = max(
+        0.0,
+        _parse_float_param(
+            params.get("mahngebuehr_1_eur", params.get("mahngebuehr_eur", 0.0)),
+            0.0,
+        ),
+    )
+    fee_2 = max(0.0, _parse_float_param(params.get("mahngebuehr_2_eur", fee_1), fee_1))
+    fee_3 = max(0.0, _parse_float_param(params.get("mahngebuehr_3_eur", fee_2), fee_2))
     
     from src.db import get_db
     conn = get_db()
@@ -100,7 +168,7 @@ def update_all():
     
     updated = 0
     for inv in rows:
-        status, dev = compute_status_row(inv, tolerance, mahngebuehr_eur)
+        status, dev = compute_status_row(inv, tolerance, fee_1, fee_2, fee_3)
         if int(inv["status_manual"] or 0) == 1:
             conn.execute(
                 "UPDATE invoices SET deviation_eur = ? WHERE invoice_id = ?",

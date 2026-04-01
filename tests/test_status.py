@@ -47,6 +47,54 @@ def test_bezahlt_mit_mahngebuehr_when_deviation_matches_fee():
     assert dev == 7.5
 
 
+def test_bezahlt_mit_mahngebuehr_uses_fee_for_2nd_reminder():
+    status, dev = compute_status_row(
+        {"invoice_id": 260001, "reminder_status": "2. Mahnung", "paid_sum_eur": 112.5, "amount_gross": 100.0},
+        0.001,
+        7.5,
+        12.5,
+        20.0,
+    )
+    assert status == "Bezahlt mit Mahngebühr"
+    assert dev == 12.5
+
+
+def test_ueberzahlung_when_fee_does_not_match_reminder_stage():
+    status, dev = compute_status_row(
+        {"invoice_id": 260001, "reminder_status": "3. Mahnung", "paid_sum_eur": 112.5, "amount_gross": 100.0},
+        0.001,
+        7.5,
+        12.5,
+        20.0,
+    )
+    assert status == "Überzahlung"
+    assert dev == 12.5
+
+
+def test_bezahlt_mit_mahngebuehr_without_reminder_stage_matches_any_configured_fee():
+    status, dev = compute_status_row(
+        {"invoice_id": 260001, "paid_sum_eur": 109.0, "amount_gross": 100.0},
+        0.001,
+        6.0,
+        9.0,
+        12.0,
+    )
+    assert status == "Bezahlt mit Mahngebühr"
+    assert dev == 9.0
+
+
+def test_ueberzahlung_without_reminder_stage_when_deviation_matches_no_configured_fee():
+    status, dev = compute_status_row(
+        {"invoice_id": 260001, "paid_sum_eur": 111.0, "amount_gross": 100.0},
+        0.001,
+        6.0,
+        9.0,
+        12.0,
+    )
+    assert status == "Überzahlung"
+    assert dev == 11.0
+
+
 def test_akonto_for_9xxxxx_invoice():
     status, dev = compute_status_row(
         {"invoice_id": 923399, "paid_sum_eur": 0.0, "amount_gross": 100.0},

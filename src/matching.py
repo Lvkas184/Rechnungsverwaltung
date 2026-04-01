@@ -46,12 +46,59 @@ def _parse_float_param(value, default):
         return float(default)
 
 
+def _load_mahngebuehren(params):
+    """Return tuple (fee_1, fee_2, fee_3) with backward compatible defaults."""
+    fee_1 = max(
+        0.0,
+        _parse_float_param(
+            params.get("mahngebuehr_1_eur", params.get("mahngebuehr_eur", 0.0)),
+            0.0,
+        ),
+    )
+    fee_2 = max(0.0, _parse_float_param(params.get("mahngebuehr_2_eur", fee_1), fee_1))
+    fee_3 = max(0.0, _parse_float_param(params.get("mahngebuehr_3_eur", fee_2), fee_2))
+    return fee_1, fee_2, fee_3
+
+
+def _extract_mahnstufe(reminder_status):
+    value = str(reminder_status or "").strip()
+    if value.startswith("1."):
+        return 1
+    if value.startswith("2."):
+        return 2
+    if value.startswith("3."):
+        return 3
+    return None
+
+
+def _matches_mahngebuehr(reminder_status, deviation):
+    """Match configured Mahngebuehr.
+
+    If a Mahnstufe is set, only that stage fee matches.
+    Without Mahnstufe, accept any configured fee as fallback.
+    """
+    stufe = _extract_mahnstufe(reminder_status)
+    if stufe == 1:
+        candidate_fees = [MAHNGEBUEHR_1_EUR]
+    elif stufe == 2:
+        candidate_fees = [MAHNGEBUEHR_2_EUR]
+    elif stufe == 3:
+        candidate_fees = [MAHNGEBUEHR_3_EUR]
+    else:
+        candidate_fees = [
+            fee
+            for fee in (MAHNGEBUEHR_1_EUR, MAHNGEBUEHR_2_EUR, MAHNGEBUEHR_3_EUR)
+            if fee > 0
+        ]
+    return any(abs(deviation - fee) <= TOLERANCE for fee in candidate_fees)
+
+
 PARAMS = load_params()
 TOLERANCE = _parse_float_param(PARAMS.get("Toleranz", 0.001), 0.001)
 AUTO_THRESHOLD = _parse_float_param(PARAMS.get("match_score_auto", 0.85), 0.85)
 REVIEW_THRESHOLD = _parse_float_param(PARAMS.get("match_score_review", 0.6), 0.6)
 SPLIT_THRESHOLD = _parse_float_param(PARAMS.get("split_threshold", 0.01), 0.01)
-MAHNGEBUEHR_EUR = max(0.0, _parse_float_param(PARAMS.get("mahngebuehr_eur", 0.0), 0.0))
+MAHNGEBUEHR_1_EUR, MAHNGEBUEHR_2_EUR, MAHNGEBUEHR_3_EUR = _load_mahngebuehren(PARAMS)
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +276,7 @@ def _remaining_invoice_amount(inv, payment=None):
     return max(0.0, float(inv["amount_gross"] or 0) - paid)
 
 
-def _compute_invoice_status(invoice_id, amount_gross, paid_sum):
+def _compute_invoice_status(invoice_id, amount_gross, paid_sum, reminder_status=None):
     amount = float(amount_gross or 0)
     paid = float(paid_sum or 0)
     deviation = paid - amount
@@ -240,7 +287,7 @@ def _compute_invoice_status(invoice_id, amount_gross, paid_sum):
         status = "Offen"
     elif abs(deviation) <= TOLERANCE:
         status = "Bezahlt"
-    elif deviation > TOLERANCE and MAHNGEBUEHR_EUR > 0 and abs(deviation - MAHNGEBUEHR_EUR) <= TOLERANCE:
+    elif deviation > TOLERANCE and _matches_mahngebuehr(reminder_status, deviation):
         status = "Bezahlt mit Mahngebühr"
     elif deviation > TOLERANCE:
         status = "Überzahlung"
@@ -276,13 +323,19 @@ def _rebuild_invoice_aggregates_and_status(conn):
     )
 
     rows = conn.execute(
-        "SELECT invoice_id, amount_gross, paid_sum_eur, COALESCE(status_manual, 0) AS status_manual FROM invoices"
+        """
+        SELECT invoice_id, amount_gross, paid_sum_eur,
+               reminder_status,
+               COALESCE(status_manual, 0) AS status_manual
+        FROM invoices
+        """
     ).fetchall()
     for inv in rows:
         status, deviation = _compute_invoice_status(
             inv["invoice_id"],
             inv["amount_gross"],
             inv["paid_sum_eur"],
+            inv["reminder_status"],
         )
         if int(inv["status_manual"] or 0) == 1:
             conn.execute(
@@ -499,13 +552,14 @@ def _rollback_existing_single_assignment(conn, payment):
 
 def apply_matching(auto_commit=True):
     """Match all unmatched payments and update DB accordingly."""
-    global TOLERANCE, AUTO_THRESHOLD, REVIEW_THRESHOLD, SPLIT_THRESHOLD, MAHNGEBUEHR_EUR
+    global TOLERANCE, AUTO_THRESHOLD, REVIEW_THRESHOLD, SPLIT_THRESHOLD
+    global MAHNGEBUEHR_1_EUR, MAHNGEBUEHR_2_EUR, MAHNGEBUEHR_3_EUR
     params = load_params()
     TOLERANCE = _parse_float_param(params.get("Toleranz", 0.001), 0.001)
     AUTO_THRESHOLD = _parse_float_param(params.get("match_score_auto", 0.85), 0.85)
     REVIEW_THRESHOLD = _parse_float_param(params.get("match_score_review", 0.6), 0.6)
     SPLIT_THRESHOLD = _parse_float_param(params.get("split_threshold", 0.01), 0.01)
-    MAHNGEBUEHR_EUR = max(0.0, _parse_float_param(params.get("mahngebuehr_eur", 0.0), 0.0))
+    MAHNGEBUEHR_1_EUR, MAHNGEBUEHR_2_EUR, MAHNGEBUEHR_3_EUR = _load_mahngebuehren(params)
 
     conn = load_db()
     cleaned_parents, cleaned_children = _cleanup_legacy_collective_splits(conn)

@@ -80,3 +80,22 @@ pytest -q
 - `manual_map` wird für regelbasiertes Matching verwendet.
 - Jede automatische Entscheidung wird in `audit_log` geschrieben.
 - `apply_matching()` verarbeitet nur Zahlungen mit `matched = 0` (idempotent bei Wiederholung).
+
+## Windows-Auslieferung (USB-Update)
+
+Für den Zielrechner unter Windows:
+
+1. Auf einem Windows-Rechner im Projektordner `build_windows.bat` ausführen.
+2. Danach liegt ein fertiges Paket in:
+   - `release/Rechnungsverwaltung-Windows/`
+   - optional als ZIP: `release/Rechnungsverwaltung-Windows.zip`
+3. Den Ordner `Rechnungsverwaltung-Windows` auf den USB-Stick kopieren.
+4. Auf dem Geschäfts-Laptop `update_from_usb.bat` im Ordner ausführen.
+
+Das Update-Skript:
+- erstellt vorab automatisch ein Backup der Daten,
+- ersetzt nur die Programmdateien,
+- startet die App danach.
+
+Anleitung für Laien:
+- `windows/ANLEITUNG_UPDATE.txt`

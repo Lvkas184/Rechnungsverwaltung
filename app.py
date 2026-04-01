@@ -15,8 +15,10 @@ from src.csv_import import (
     import_voba_pur_csv,
 )
 from src.db import DB_PATH, PARAM_PATH, get_db, init_db
+from src.import_history import fetch_import_batches, rollback_import_batch
 from src.mahnung import run_mahnung
 from src.matching import apply_matching
+from src.reminders import clear_invoice_reminders, fetch_invoice_reminder_history, save_invoice_reminder
 from src.status import update_all
 
 app = Flask(__name__)
@@ -31,9 +33,13 @@ DEFAULT_PARAMS = {
     "Toleranz": 0.001,
     "due_days_1": 30,
     "due_days_2": 60,
+    "due_days_3": 90,
     "split_threshold": 0.01,
     "match_score_auto": 0.85,
     "match_score_review": 0.6,
+    "mahngebuehr_1_eur": 0.0,
+    "mahngebuehr_2_eur": 0.0,
+    "mahngebuehr_3_eur": 0.0,
     "mahngebuehr_eur": 0.0,
     "date_origin": "1899-12-30",
 }
@@ -259,6 +265,7 @@ def dashboard():
         ).fetchone()[0],
         "mahnung_1": conn.execute("SELECT COUNT(*) FROM invoices WHERE reminder_status = '1. Mahnung'").fetchone()[0],
         "mahnung_2": conn.execute("SELECT COUNT(*) FROM invoices WHERE reminder_status = '2. Mahnung'").fetchone()[0],
+        "mahnung_3": conn.execute("SELECT COUNT(*) FROM invoices WHERE reminder_status = '3. Mahnung'").fetchone()[0],
         "open_sum": conn.execute("SELECT COALESCE(SUM(amount_gross - COALESCE(paid_sum_eur, 0)), 0) FROM invoices WHERE COALESCE(status, 'Offen') NOT IN ('Bezahlt', 'Bezahlt mit Mahngebühr')").fetchone()[0],
     }
     # Recent audit entries
@@ -277,18 +284,23 @@ def dashboard():
 def einstellungen():
     params = _load_app_params()
     if request.method == "POST":
-        raw_mahngebuehr = request.form.get("mahngebuehr_eur", "").strip()
         try:
-            mahngebuehr = _parse_eur(raw_mahngebuehr or "0")
+            mahngebuehr_1 = _parse_eur((request.form.get("mahngebuehr_1_eur", "") or "").strip() or "0")
+            mahngebuehr_2 = _parse_eur((request.form.get("mahngebuehr_2_eur", "") or "").strip() or "0")
+            mahngebuehr_3 = _parse_eur((request.form.get("mahngebuehr_3_eur", "") or "").strip() or "0")
         except ValueError:
-            flash("Mahngebühr muss ein gültiger Eurobetrag sein (z.B. 7,50).", "error")
+            flash("Mahngebühren müssen gültige Eurobeträge sein (z.B. 7,50).", "error")
             return redirect(url_for("einstellungen"))
 
-        if mahngebuehr < 0:
-            flash("Mahngebühr darf nicht negativ sein.", "error")
+        if mahngebuehr_1 < 0 or mahngebuehr_2 < 0 or mahngebuehr_3 < 0:
+            flash("Mahngebühren dürfen nicht negativ sein.", "error")
             return redirect(url_for("einstellungen"))
 
-        params["mahngebuehr_eur"] = round(mahngebuehr, 2)
+        params["mahngebuehr_1_eur"] = round(mahngebuehr_1, 2)
+        params["mahngebuehr_2_eur"] = round(mahngebuehr_2, 2)
+        params["mahngebuehr_3_eur"] = round(mahngebuehr_3, 2)
+        # Legacy-Parameter für Abwärtskompatibilität
+        params["mahngebuehr_eur"] = round(mahngebuehr_1, 2)
         try:
             _save_app_params(params)
             update_all()
@@ -386,8 +398,9 @@ def rechnung_detail(invoice_id):
     audit = conn.execute(
         "SELECT * FROM audit_log WHERE invoice_id = ? ORDER BY audit_id DESC", (invoice_id,)
     ).fetchall()
+    reminder_history = fetch_invoice_reminder_history(conn, invoice_id, invoice_row=inv)
     conn.close()
-    return render_template("rechnung_detail.html", inv=inv, payments=payments, audit=audit)
+    return render_template("rechnung_detail.html", inv=inv, payments=payments, audit=audit, reminder_history=reminder_history)
 
 
 @app.route("/rechnungen/<int:invoice_id>/bemerkung", methods=["POST"])
@@ -504,7 +517,7 @@ def rechnung_reset_status_auto(invoice_id):
 
 @app.route("/rechnungen/<int:invoice_id>/mahnung", methods=["POST"])
 def rechnung_update_mahnung(invoice_id):
-    allowed_statuses = {"", "1. Mahnung", "2. Mahnung"}
+    allowed_statuses = {"", "1. Mahnung", "2. Mahnung", "3. Mahnung"}
     reminder_status = (request.form.get("reminder_status") or "").strip()
     reminder_date_raw = (request.form.get("reminder_date") or "").strip()
 
@@ -537,27 +550,22 @@ def rechnung_update_mahnung(invoice_id):
             flash("Rechnung nicht gefunden.", "error")
             return redirect(url_for("rechnungen"))
 
-        conn.execute(
-            """
-            UPDATE invoices
-            SET reminder_status = ?,
-                reminder_date = ?,
-                reminder_manual = 1,
-                updated_at = ?
-            WHERE invoice_id = ?
-            """,
-            (
-                reminder_status if reminder_status else None,
-                reminder_date,
-                datetime.utcnow().isoformat(),
+        if reminder_status:
+            save_invoice_reminder(
+                conn,
                 invoice_id,
-            ),
-        )
+                reminder_status,
+                reminder_date,
+                manual_entry=1,
+                manual_override=1,
+            )
+        else:
+            clear_invoice_reminders(conn, invoice_id, manual_override=1)
         conn.commit()
         if reminder_status:
-            flash("✅ Mahnungsstatus manuell gespeichert.", "success")
+            flash("✅ Mahnung gespeichert und im Verlauf ergänzt.", "success")
         else:
-            flash("✅ Mahnungsstatus manuell auf 'Keine' gesetzt.", "success")
+            flash("✅ Mahnverlauf für diese Rechnung gelöscht.", "success")
     except Exception as e:
         conn.rollback()
         flash(f"Fehler beim Speichern des Mahnungsstatus: {e}", "error")
@@ -608,6 +616,7 @@ def zahlungen():
     conn = get_db()
     filter_type = request.args.get("filter", "")
     show_type = request.args.get("show", "income")  # income (default), all, akonto, schadens
+    bank_filter = request.args.get("bank", "").strip()
     search = request.args.get("q", "").strip()
     page = max(1, int(request.args.get("page", 1)))
     sort_col = request.args.get("sort", "payment_id")
@@ -636,6 +645,19 @@ def zahlungen():
         sort_col = "payment_id"
     if order not in ["asc", "desc"]:
         order = "desc"
+
+    bank_options = [
+        row["source"]
+        for row in conn.execute(
+            """
+            SELECT DISTINCT source
+            FROM payments
+            WHERE source IS NOT NULL
+              AND TRIM(source) <> ''
+            ORDER BY source COLLATE NOCASE
+            """
+        ).fetchall()
+    ]
 
     query = """
         SELECT payments.*, invoices.remark AS invoice_remark
@@ -696,6 +718,9 @@ def zahlungen():
             AND payments.match_score IS NOT NULL
             AND payments.match_score > 0
         """
+    if bank_filter:
+        query += " AND payments.source = ?"
+        params.append(bank_filter)
     if search:
         query += """
             AND (
@@ -770,6 +795,9 @@ def zahlungen():
             AND payments.match_score IS NOT NULL
             AND payments.match_score > 0
         """
+    if bank_filter:
+        count_query += " AND payments.source = ?"
+        count_params.append(bank_filter)
     if search:
         count_query += """
             AND (
@@ -787,7 +815,8 @@ def zahlungen():
     total_pages = max(1, (total + per_page - 1) // per_page)
     return render_template("zahlungen.html", payments=payments, page=page,
                            total_pages=total_pages, total=total,
-                           filter_type=filter_type, show_type=show_type, search=search,
+                           filter_type=filter_type, show_type=show_type, bank_filter=bank_filter,
+                           bank_options=bank_options, search=search,
                            sort_col=sort_col, order=order, per_page=per_page)
 
 
@@ -1158,7 +1187,8 @@ def zahlung_manual_clear(payment_id):
 
 @app.route("/upload")
 def upload():
-    return render_template("upload.html")
+    import_batches = fetch_import_batches(limit=30)
+    return render_template("upload.html", import_batches=import_batches)
 
 
 @app.route("/upload/rechnungen", methods=["POST"])
@@ -1167,7 +1197,7 @@ def upload_rechnungen():
     if not f or not f.filename:
         flash("Keine Datei ausgewählt.", "error")
         return redirect(url_for("upload"))
-    result = import_datev_rechnungen(f.read())
+    result = import_datev_rechnungen(f.read(), filename=f.filename, created_by="upload")
     if result["error"]:
         flash(f"Fehler: {result['error']}", "error")
     else:
@@ -1192,7 +1222,7 @@ def upload_bank(bank):
         flash(f"Unbekannte Bank: {bank}", "error")
         return redirect(url_for("upload"))
 
-    result = importer(f.read())
+    result = importer(f.read(), filename=f.filename, created_by="upload")
     if result["error"]:
         flash(f"Fehler: {result['error']}", "error")
     else:
@@ -1226,7 +1256,7 @@ def migration_upload():
     from src.csv_import import import_legacy_csv
 
     try:
-        res = import_legacy_csv(content)
+        res = import_legacy_csv(content, filename=file.filename, created_by="migration")
         if res.get("error"):
             flash(f"Fehler beim Import: {res['error']}", "error")
         else:
@@ -1264,7 +1294,7 @@ def migration_upload_invoices():
 
     try:
         from src.csv_import import import_legacy_invoices_csv
-        res = import_legacy_invoices_csv(content)
+        res = import_legacy_invoices_csv(content, filename=file.filename, created_by="migration")
         if res.get("error"):
             flash(f"Fehler beim Import: {res['error']}", "error")
         else:
@@ -1282,6 +1312,22 @@ def migration_upload_invoices():
         flash(f"Unerwarteter Fehler: {str(e)}", "error")
 
     return redirect(url_for("migration"))
+
+
+@app.route("/imports/<int:import_batch_id>/rollback", methods=["POST"])
+def import_rollback(import_batch_id):
+    result = rollback_import_batch(import_batch_id)
+    if not result.get("ok"):
+        flash(result.get("error", "Import konnte nicht rückgängig gemacht werden."), "error")
+        return redirect(url_for("upload"))
+
+    try:
+        update_all()
+    except Exception:
+        pass
+
+    flash(result.get("message", "Import wurde rückgängig gemacht."), "success")
+    return redirect(url_for("upload"))
 
 
 @app.route("/shutdown", methods=["POST"])

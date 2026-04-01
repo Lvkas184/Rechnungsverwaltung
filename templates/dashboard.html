@@ -33,8 +33,8 @@
         <div class="stat-label">Nicht zugeordnete Zahlungen</div>
     </div>
     <div class="stat-card stat-warn">
-        <div class="stat-number">{{ stats.mahnung_1 + stats.mahnung_2 }}</div>
-        <div class="stat-label">Mahnungen ({{ stats.mahnung_1 }}× erste, {{ stats.mahnung_2 }}× zweite)</div>
+        <div class="stat-number">{{ stats.mahnung_1 + stats.mahnung_2 + stats.mahnung_3 }}</div>
+        <div class="stat-label">Mahnungen ({{ stats.mahnung_1 }}× erste, {{ stats.mahnung_2 }}× zweite, {{ stats.mahnung_3 }}× dritte)</div>
     </div>
     <div class="stat-card stat-neutral">
         <div class="stat-number">{{ stats.total_invoices }}</div>
@@ -60,7 +60,7 @@
         <button type="submit" class="btn btn-warning btn-large" onclick="return confirm('Mahnlauf jetzt ausführen?')">
             ⚠️ Mahnlauf starten
         </button>
-        <p class="action-desc">1. und 2. Mahnung prüfen</p>
+        <p class="action-desc">1., 2. und 3. Mahnung prüfen</p>
     </form>
 </div>
 

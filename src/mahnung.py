@@ -1,7 +1,7 @@
 """Mahnlogik für offene Rechnungen basierend auf issue_date.
 
-Setzt reminder_status auf '1. Mahnung' oder '2. Mahnung' abhängig
-von den konfigurierten Fristen.
+Setzt reminder_status auf '1. Mahnung', '2. Mahnung' oder '3. Mahnung'
+abhängig von den konfigurierten Fristen.
 
 Rechnungen mit `reminder_manual = 1` werden nicht automatisch geändert.
 """
@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 
 from src.db import PARAM_PATH, get_db, init_db
+from src.reminders import advance_automatic_reminder
 
 
 def load_params(path=PARAM_PATH):
@@ -22,6 +23,7 @@ def run_mahnung():
     p = load_params()
     due_1 = int(p.get("due_days_1", 30))
     due_2 = int(p.get("due_days_2", 60))
+    due_3 = int(p.get("due_days_3", max(due_2 + 30, 90)))
     today = datetime.utcnow().date()
 
     init_db()
@@ -44,16 +46,12 @@ def run_mahnung():
             continue
 
         days = (today - issue).days
-        if days >= due_2:
-            conn.execute(
-                "UPDATE invoices SET reminder_status = ?, reminder_date = ? WHERE invoice_id = ?",
-                ("2. Mahnung", today.isoformat(), inv["invoice_id"]),
-            )
+        if days >= due_3:
+            advance_automatic_reminder(conn, inv, "3. Mahnung", today.isoformat())
+        elif days >= due_2:
+            advance_automatic_reminder(conn, inv, "2. Mahnung", today.isoformat())
         elif days >= due_1:
-            conn.execute(
-                "UPDATE invoices SET reminder_status = ?, reminder_date = ? WHERE invoice_id = ?",
-                ("1. Mahnung", today.isoformat(), inv["invoice_id"]),
-            )
+            advance_automatic_reminder(conn, inv, "1. Mahnung", today.isoformat())
 
     conn.commit()
     conn.close()

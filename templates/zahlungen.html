@@ -21,6 +21,13 @@
             <option value="unmatched" {{ 'selected' if filter_type == 'unmatched' }}>❌ Nicht zugeordnet</option>
         </select>
 
+        <select name="bank" class="filter-select" onchange="this.form.submit()">
+            <option value="">Alle Banken</option>
+            {% for bank in bank_options %}
+            <option value="{{ bank }}" {{ 'selected' if bank_filter == bank }}>{{ bank }}</option>
+            {% endfor %}
+        </select>
+
         <select name="per_page" class="filter-select" onchange="this.form.submit()">
             <option value="20" {{ 'selected' if per_page == 20 }}>20 pro Seite</option>
             <option value="50" {{ 'selected' if per_page == 50 }}>50 pro Seite</option>
@@ -40,7 +47,7 @@
         {% macro sort_link(col_id, label) %}
             {% set new_order = 'asc' if sort_col != col_id or order == 'desc' else 'desc' %}
             {% set arrow = ' ↑' if sort_col == col_id and order == 'asc' else (' ↓' if sort_col == col_id and order == 'desc' else '') %}
-            <a href="{{ url_for('zahlungen', page=page, filter=filter_type, show=show_type, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between;">
+            <a href="{{ url_for('zahlungen', page=page, filter=filter_type, show=show_type, bank=bank_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between;">
                 {{ label }}<span style="font-size: 0.8em; color: #888;">{{ arrow }}</span>
             </a>
         {% endmacro %}
@@ -100,16 +107,17 @@
 
 {% if total_pages > 1 %}
 <div class="pagination" style="display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
-    <a href="{{ url_for('zahlungen', page=1, filter=filter_type, show=show_type, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Erste Seite">« Erste</a>
+    <a href="{{ url_for('zahlungen', page=1, filter=filter_type, show=show_type, bank=bank_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Erste Seite">« Erste</a>
 
     {% if page > 1 %}
-    <a href="{{ url_for('zahlungen', page=page-1, filter=filter_type, show=show_type, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary">← Zurück</a>
+    <a href="{{ url_for('zahlungen', page=page-1, filter=filter_type, show=show_type, bank=bank_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary">← Zurück</a>
     {% endif %}
 
     <form method="GET" action="{{ url_for('zahlungen') }}" style="display: inline-flex; align-items: center; gap: 5px; margin: 0 10px;">
         <input type="hidden" name="q" value="{{ search }}">
         <input type="hidden" name="filter" value="{{ filter_type }}">
         <input type="hidden" name="show" value="{{ show_type }}">
+        <input type="hidden" name="bank" value="{{ bank_filter }}">
         <input type="hidden" name="sort" value="{{ sort_col }}">
         <input type="hidden" name="order" value="{{ order }}">
         <input type="hidden" name="per_page" value="{{ per_page }}">
@@ -120,10 +128,10 @@
     </form>
 
     {% if page < total_pages %}
-    <a href="{{ url_for('zahlungen', page=page+1, filter=filter_type, show=show_type, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary">Weiter →</a>
+    <a href="{{ url_for('zahlungen', page=page+1, filter=filter_type, show=show_type, bank=bank_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary">Weiter →</a>
     {% endif %}
 
-    <a href="{{ url_for('zahlungen', page=total_pages, filter=filter_type, show=show_type, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Letzte Seite">Letzte »</a>
+    <a href="{{ url_for('zahlungen', page=total_pages, filter=filter_type, show=show_type, bank=bank_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Letzte Seite">Letzte »</a>
 </div>
 {% endif %}
 

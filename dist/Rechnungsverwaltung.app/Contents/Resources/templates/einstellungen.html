@@ -10,22 +10,54 @@
         Diese Werte steuern die automatische Statusberechnung.
     </p>
 
+    {% set fee1 = params.mahngebuehr_1_eur if params.mahngebuehr_1_eur is not none else params.mahngebuehr_eur %}
+    {% set fee2 = params.mahngebuehr_2_eur if params.mahngebuehr_2_eur is not none else fee1 %}
+    {% set fee3 = params.mahngebuehr_3_eur if params.mahngebuehr_3_eur is not none else fee2 %}
+
     <form method="POST" action="{{ url_for('einstellungen') }}" class="inline-form">
         <div class="form-group">
-            <label for="mahngebuehr_eur">Höhe Mahngebühr (EUR)</label>
+            <label for="mahngebuehr_1_eur">Mahngebühr 1. Mahnung (EUR)</label>
             <input
                 type="text"
-                name="mahngebuehr_eur"
-                id="mahngebuehr_eur"
+                name="mahngebuehr_1_eur"
+                id="mahngebuehr_1_eur"
                 class="form-input"
                 inputmode="decimal"
                 placeholder="z.B. 7,50"
-                value="{{ params.mahngebuehr_eur | format_eur if params.mahngebuehr_eur is not none else '0,00 €' }}"
+                value="{{ ('%.2f'|format(fee1|float)).replace('.', ',') }}"
+                required
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="mahngebuehr_2_eur">Mahngebühr 2. Mahnung (EUR)</label>
+            <input
+                type="text"
+                name="mahngebuehr_2_eur"
+                id="mahngebuehr_2_eur"
+                class="form-input"
+                inputmode="decimal"
+                placeholder="z.B. 12,50"
+                value="{{ ('%.2f'|format(fee2|float)).replace('.', ',') }}"
+                required
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="mahngebuehr_3_eur">Mahngebühr 3. Mahnung (EUR)</label>
+            <input
+                type="text"
+                name="mahngebuehr_3_eur"
+                id="mahngebuehr_3_eur"
+                class="form-input"
+                inputmode="decimal"
+                placeholder="z.B. 20,00"
+                value="{{ ('%.2f'|format(fee3|float)).replace('.', ',') }}"
                 required
             >
             <small class="text-muted">
-                Überzahlungen mit exakt dieser Abweichung erhalten den Status
-                „Bezahlt mit Mahngebühr“ und werden wie „Bezahlt“ behandelt.
+                Überzahlungen mit exakt passender Mahngebühr zur Mahnstufe (1/2/3)
+                erhalten den Status „Bezahlt mit Mahngebühr“ und werden wie „Bezahlt“ behandelt.
             </small>
         </div>
         <button type="submit" class="btn btn-primary">💾 Einstellungen speichern</button>

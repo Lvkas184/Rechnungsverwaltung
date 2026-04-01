@@ -15,6 +15,7 @@ import encodings.cp1252     # Force PyInstaller to bundle cp1252
 from datetime import datetime, timedelta
 
 from src.db import get_db
+from src.import_history import begin_import_batch, finish_import_batch, record_invoice_import, record_payment_import
 from src.invoice_rules import classify_special_invoice_status
 from src.payment_rules import is_akonto_payment, is_schadensrechnung_payment
 
@@ -94,7 +95,7 @@ def _read_csv(file_content):
 # DATEV EXTF Import (Rechnungsausgangsbuch)
 # ---------------------------------------------------------------------------
 
-def import_datev_rechnungen(file_content, db_path=None):
+def import_datev_rechnungen(file_content, db_path=None, filename=None, created_by="upload"):
     """Import invoices from DATEV EXTF export.
 
     DATEV format:
@@ -150,8 +151,18 @@ def import_datev_rechnungen(file_content, db_path=None):
                 "error": f"Spalten 'Belegfeld1'/'Umsatz' nicht gefunden. Vorhandene: {', '.join(header[:20])}"}
 
     conn = get_db(db_path)
+    import_batch_id = begin_import_batch(
+        conn,
+        "rechnungen_datev",
+        "Rechnungen (DATEV)",
+        filename=filename,
+        created_by=created_by,
+    )
     imported = 0
     skipped = 0
+    touched_fields = ["name", "amount_gross", "issue_date"]
+    if idx_due is not None:
+        touched_fields.append("due_date")
 
     for row in data:
         # Skip empty rows
@@ -189,29 +200,54 @@ def import_datev_rechnungen(file_content, db_path=None):
         date = _parse_date(val(idx_date))
         due_date = _parse_date(val(idx_due))
         default_status = classify_special_invoice_status(inv_nr) or "Offen"
+        before_row = conn.execute(
+            "SELECT * FROM invoices WHERE invoice_id = ?",
+            (inv_nr,),
+        ).fetchone()
 
-        conn.execute(
-            """INSERT OR REPLACE INTO invoices(invoice_id, name, amount_gross, issue_date, due_date,
-                   status, paid_sum_eur, payment_count)
-               VALUES (?, ?, ?,  ?, ?,
-                       COALESCE((SELECT status FROM invoices WHERE invoice_id = ?), ?),
-                       COALESCE((SELECT paid_sum_eur FROM invoices WHERE invoice_id = ?), 0),
-                       COALESCE((SELECT payment_count FROM invoices WHERE invoice_id = ?), 0))""",
-            (inv_nr, name, abs(amount) if amount else None, date, due_date,
-             inv_nr, default_status, inv_nr, inv_nr),
-        )
+        if before_row is None:
+            conn.execute(
+                """
+                INSERT INTO invoices(
+                    invoice_id, name, amount_gross, issue_date, due_date,
+                    status, paid_sum_eur, payment_count
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+                """,
+                (inv_nr, name, abs(amount) if amount else None, date, due_date, default_status),
+            )
+        elif idx_due is not None:
+            conn.execute(
+                """
+                UPDATE invoices
+                SET name = ?, amount_gross = ?, issue_date = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE invoice_id = ?
+                """,
+                (name, abs(amount) if amount else None, date, due_date, inv_nr),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE invoices
+                SET name = ?, amount_gross = ?, issue_date = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE invoice_id = ?
+                """,
+                (name, abs(amount) if amount else None, date, inv_nr),
+            )
+
+        record_invoice_import(conn, import_batch_id, inv_nr, before_row, touched_fields)
         imported += 1
 
+    finish_import_batch(conn, import_batch_id, imported, skipped)
     conn.commit()
     conn.close()
-    return {"imported": imported, "skipped": skipped, "error": None}
+    return {"imported": imported, "skipped": skipped, "error": None, "import_batch_id": import_batch_id}
 
 
 # ---------------------------------------------------------------------------
 # Bank-Kontoauszug CSV Import
 # ---------------------------------------------------------------------------
 
-def import_bank_csv(file_content, source_name, db_path=None):
+def import_bank_csv(file_content, source_name, db_path=None, filename=None, created_by="upload"):
     """Import bank statement CSV.
 
     All three banks (Sparkasse, VoBa Kraichgau, VoBa Pur) share the same format:
@@ -247,6 +283,13 @@ def import_bank_csv(file_content, source_name, db_path=None):
                 "error": f"Spalte 'Betrag in EUR' nicht gefunden. Vorhandene: {', '.join(header_clean)}"}
 
     conn = get_db(db_path)
+    import_batch_id = begin_import_batch(
+        conn,
+        f"bank_{source_name.lower().replace(' ', '_')}",
+        source_name,
+        filename=filename,
+        created_by=created_by,
+    )
     imported = 0
     skipped = 0
 
@@ -288,32 +331,35 @@ def import_bank_csv(file_content, source_name, db_path=None):
                 schadens_flag,
             ),
         )
+        payment_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        record_payment_import(conn, import_batch_id, payment_id)
         imported += 1
 
+    finish_import_batch(conn, import_batch_id, imported, skipped)
     conn.commit()
     conn.close()
-    return {"imported": imported, "skipped": skipped, "error": None}
+    return {"imported": imported, "skipped": skipped, "error": None, "import_batch_id": import_batch_id}
 
 
 # ---------------------------------------------------------------------------
 # Convenience wrappers (one per bank)
 # ---------------------------------------------------------------------------
 
-def import_sparkasse_csv(file_content, db_path=None):
-    return import_bank_csv(file_content, "Sparkasse", db_path)
+def import_sparkasse_csv(file_content, db_path=None, filename=None, created_by="upload"):
+    return import_bank_csv(file_content, "Sparkasse", db_path, filename=filename, created_by=created_by)
 
-def import_voba_kraichgau_csv(file_content, db_path=None):
-    return import_bank_csv(file_content, "VoBa Kraichgau", db_path)
+def import_voba_kraichgau_csv(file_content, db_path=None, filename=None, created_by="upload"):
+    return import_bank_csv(file_content, "VoBa Kraichgau", db_path, filename=filename, created_by=created_by)
 
-def import_voba_pur_csv(file_content, db_path=None):
-    return import_bank_csv(file_content, "VoBa Pur", db_path)
+def import_voba_pur_csv(file_content, db_path=None, filename=None, created_by="upload"):
+    return import_bank_csv(file_content, "VoBa Pur", db_path, filename=filename, created_by=created_by)
 
 
 # ---------------------------------------------------------------------------
 # Legacy Excel/CSV Import (One-time Migration)
 # ---------------------------------------------------------------------------
 
-def import_legacy_csv(file_content, db_path=None):
+def import_legacy_csv(file_content, db_path=None, filename=None, created_by="migration"):
     """Import an already processed Excel/CSV sheet from the legacy pipeline.
     
     Expected columns:
@@ -348,6 +394,13 @@ def import_legacy_csv(file_content, db_path=None):
                 "error": f"Pflichtspalten (Buchungsdatum, Betrag_eur) nicht gefunden. Vorhandene: {', '.join(header_clean)}"}
 
     conn = get_db(db_path)
+    import_batch_id = begin_import_batch(
+        conn,
+        "legacy_payments",
+        "Alt-Daten Zahlungen",
+        filename=filename,
+        created_by=created_by,
+    )
     imported = 0
     skipped = 0
 
@@ -417,14 +470,17 @@ def import_legacy_csv(file_content, db_path=None):
                 match_rule,
             ),
         )
+        payment_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        record_payment_import(conn, import_batch_id, payment_id)
         imported += 1
 
+    finish_import_batch(conn, import_batch_id, imported, skipped)
     conn.commit()
     conn.close()
-    return {"imported": imported, "skipped": skipped, "error": None}
+    return {"imported": imported, "skipped": skipped, "error": None, "import_batch_id": import_batch_id}
 
 
-def import_legacy_invoices_csv(file_content, db_path=None):
+def import_legacy_invoices_csv(file_content, db_path=None, filename=None, created_by="migration"):
     """Import an already processed Invoice Excel/CSV sheet from the legacy pipeline.
     
     Expected columns:
@@ -455,8 +511,16 @@ def import_legacy_invoices_csv(file_content, db_path=None):
                 "error": f"Pflichtspalten (Rechnungsnummer, Betrag_Brutto) nicht gefunden. Vorhandene: {', '.join(header_clean)}"}
 
     conn = get_db(db_path)
+    import_batch_id = begin_import_batch(
+        conn,
+        "legacy_invoices",
+        "Alt-Daten Rechnungen",
+        filename=filename,
+        created_by=created_by,
+    )
     imported = 0
     skipped = 0
+    touched_fields = ["name", "amount_gross"]
 
     for row in data:
         if not row or all(c.strip() == "" for c in row):
@@ -489,17 +553,33 @@ def import_legacy_invoices_csv(file_content, db_path=None):
 
         name = val(idx_name)
         default_status = classify_special_invoice_status(inv_nr) or "Offen"
+        before_row = conn.execute(
+            "SELECT * FROM invoices WHERE invoice_id = ?",
+            (inv_nr,),
+        ).fetchone()
 
-        conn.execute(
-            """INSERT OR REPLACE INTO invoices(invoice_id, name, amount_gross, 
-                   status, paid_sum_eur, payment_count)
-               VALUES (?, ?, ?, COALESCE((SELECT status FROM invoices WHERE invoice_id = ?), ?),
-                       COALESCE((SELECT paid_sum_eur FROM invoices WHERE invoice_id = ?), 0),
-                       COALESCE((SELECT payment_count FROM invoices WHERE invoice_id = ?), 0))""",
-            (inv_nr, name, abs(amount) if amount else None, inv_nr, default_status, inv_nr, inv_nr),
-        )
+        if before_row is None:
+            conn.execute(
+                """
+                INSERT INTO invoices(invoice_id, name, amount_gross, status, paid_sum_eur, payment_count)
+                VALUES (?, ?, ?, ?, 0, 0)
+                """,
+                (inv_nr, name, abs(amount) if amount else None, default_status),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE invoices
+                SET name = ?, amount_gross = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE invoice_id = ?
+                """,
+                (name, abs(amount) if amount else None, inv_nr),
+            )
+
+        record_invoice_import(conn, import_batch_id, inv_nr, before_row, touched_fields)
         imported += 1
 
+    finish_import_batch(conn, import_batch_id, imported, skipped)
     conn.commit()
     conn.close()
-    return {"imported": imported, "skipped": skipped, "error": None}
+    return {"imported": imported, "skipped": skipped, "error": None, "import_batch_id": import_batch_id}

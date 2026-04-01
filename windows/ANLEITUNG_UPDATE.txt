@@ -1,0 +1,66 @@
+RECHNUNGSVERWALTUNG - ANLEITUNG FUER UPDATE PER USB (WINDOWS)
+=============================================================
+
+WICHTIG:
+- Das Programm auf dem Geschaefts-Laptop immer zuerst schliessen.
+- Keine Dateien im Programmordner manuell loeschen.
+
+
+A) Was du vom Entwickler bekommst
+---------------------------------
+Du bekommst einen Ordner:
+  Rechnungsverwaltung-Windows
+
+In diesem Ordner sind mindestens:
+  1) Rechnungsverwaltung\Rechnungsverwaltung.exe
+  2) update_from_usb.bat
+  3) ANLEITUNG_UPDATE.txt
+
+
+B) Erstinstallation (wenn noch nichts installiert ist)
+------------------------------------------------------
+1. USB-Stick einstecken.
+2. Ordner "Rechnungsverwaltung-Windows" oeffnen.
+3. Doppelklick auf "update_from_usb.bat".
+4. Warten bis "Update abgeschlossen" angezeigt wird.
+5. Das Programm startet automatisch.
+
+Hinweis:
+Bei der allerersten Installation kann "Kein Datenordner gefunden" erscheinen.
+Das ist normal.
+
+
+C) Normales Update (wenn App schon vorhanden ist)
+-------------------------------------------------
+1. Programm auf dem Geschaefts-Laptop schliessen.
+2. USB-Stick einstecken.
+3. Ordner "Rechnungsverwaltung-Windows" oeffnen.
+4. Doppelklick auf "update_from_usb.bat".
+5. Warten bis "Update abgeschlossen" angezeigt wird.
+6. Das Programm startet automatisch.
+
+
+D) Wo liegen die Daten / Backups?
+---------------------------------
+Live-Daten:
+  C:\Users\<DEIN-BENUTZER>\Documents\Rechnungsverwaltung_Daten
+
+Automatische Backups vor jedem Update:
+  C:\Users\<DEIN-BENUTZER>\Documents\Rechnungsverwaltung_Backups\<Zeitstempel>
+
+Installierter Programmordner:
+  C:\Users\<DEIN-BENUTZER>\AppData\Local\Rechnungsverwaltung\Rechnungsverwaltung
+
+
+E) Falls Windows warnt ("Unbekannte App")
+-----------------------------------------
+1. Auf "Weitere Informationen" klicken.
+2. Dann "Trotzdem ausfuehren".
+
+
+F) Falls etwas schiefgeht
+-------------------------
+1. Nicht mehrfach klicken.
+2. Screenshot von der Fehlermeldung machen.
+3. Dem Entwickler schicken.
+4. Backup-Ordner NICHT loeschen.

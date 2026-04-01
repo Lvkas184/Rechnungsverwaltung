@@ -69,6 +69,26 @@ def _run_lightweight_migrations(conn):
     _ensure_column(conn, "payments", "schadensrechnung", "schadensrechnung INTEGER DEFAULT 0")
     _ensure_column(conn, "payments", "status_manual", "status_manual INTEGER DEFAULT 0")
     _ensure_column(conn, "payments", "status_override", "status_override TEXT")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS invoice_reminders (
+          reminder_entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_id INTEGER NOT NULL,
+          reminder_status TEXT NOT NULL,
+          reminder_date TEXT NOT NULL,
+          manual_entry INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(invoice_id) REFERENCES invoices(invoice_id)
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_reminders_invoice_stage
+          ON invoice_reminders(invoice_id, reminder_status);
+
+        CREATE INDEX IF NOT EXISTS idx_invoice_reminders_invoice
+          ON invoice_reminders(invoice_id);
+        """
+    )
     _backfill_special_payment_flags(conn)
 
 

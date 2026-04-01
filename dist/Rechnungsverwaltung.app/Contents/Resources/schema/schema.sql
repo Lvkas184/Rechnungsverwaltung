@@ -70,3 +70,50 @@ CREATE TABLE IF NOT EXISTS audit_log (
   FOREIGN KEY(payment_id) REFERENCES payments(payment_id),
   FOREIGN KEY(invoice_id) REFERENCES invoices(invoice_id)
 );
+
+CREATE TABLE IF NOT EXISTS invoice_reminders (
+  reminder_entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  invoice_id INTEGER NOT NULL,
+  reminder_status TEXT NOT NULL,
+  reminder_date TEXT NOT NULL,
+  manual_entry INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(invoice_id) REFERENCES invoices(invoice_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_reminders_invoice_stage
+  ON invoice_reminders(invoice_id, reminder_status);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_reminders_invoice
+  ON invoice_reminders(invoice_id);
+
+CREATE TABLE IF NOT EXISTS import_batches (
+  import_batch_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  import_type TEXT NOT NULL,
+  source_label TEXT NOT NULL,
+  filename TEXT,
+  created_by TEXT,
+  row_count_imported INTEGER DEFAULT 0,
+  row_count_skipped INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'active',
+  rollback_note TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  rollback_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS import_batch_items (
+  import_batch_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  import_batch_id INTEGER NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  fields_touched TEXT,
+  before_state TEXT,
+  after_state TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(import_batch_id) REFERENCES import_batches(import_batch_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_batch_items_batch
+  ON import_batch_items(import_batch_id);

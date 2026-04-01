@@ -70,6 +70,25 @@
 
             <dt>Mahnmodus</dt>
             <dd>{{ "Manuell" if inv.reminder_manual else "Automatisch" }}</dd>
+
+            <dt>Mahnverlauf</dt>
+            <dd>
+                {% if reminder_history %}
+                <div class="reminder-history-list">
+                    {% for reminder in reminder_history %}
+                    <div class="reminder-history-item">
+                        <span class="mahnung-badge">{{ reminder.reminder_status if reminder.reminder_status is defined else reminder['reminder_status'] }}</span>
+                        <span>{{ (reminder.reminder_date if reminder.reminder_date is defined else reminder['reminder_date']) | format_date }}</span>
+                        <span class="badge">
+                            {{ "Manuell" if ((reminder.manual_entry if reminder.manual_entry is defined else reminder['manual_entry']) or 0) else "Automatisch" }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                —
+                {% endif %}
+            </dd>
         </dl>
     </div>
 </div>
@@ -117,9 +136,9 @@
 </div>
 
 <div class="card">
-    <h2>Mahnung manuell setzen</h2>
+    <h2>Mahnung speichern</h2>
     <p class="page-desc" style="margin-bottom: 14px;">
-        Manuelle Mahnung überschreibt den automatischen Mahnlauf für diese Rechnung.
+        Jede Mahnstufe wird mit eigenem Datum gespeichert. In der Rechnungsübersicht zählt immer die zuletzt erreichte Mahnstufe.
     </p>
     <form method="POST" action="{{ url_for('rechnung_update_mahnung', invoice_id=inv.invoice_id) }}" class="inline-form">
         <div class="form-group">
@@ -128,6 +147,7 @@
                 <option value="" {{ 'selected' if not inv.reminder_status }}>Keine Mahnung</option>
                 <option value="1. Mahnung" {{ 'selected' if inv.reminder_status == '1. Mahnung' }}>1. Mahnung</option>
                 <option value="2. Mahnung" {{ 'selected' if inv.reminder_status == '2. Mahnung' }}>2. Mahnung</option>
+                <option value="3. Mahnung" {{ 'selected' if inv.reminder_status == '3. Mahnung' }}>3. Mahnung</option>
             </select>
         </div>
         <div class="form-group">
