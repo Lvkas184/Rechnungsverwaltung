@@ -12,11 +12,11 @@
     </div>
 </div>
 
-<div class="stats-grid">
+<div class="stats-grid dashboard-stats-grid">
     <div class="stat-card stat-open">
         <div class="stat-card-top">
             <div class="stat-label">Offene Rechnungen</div>
-            <div class="stat-icon material-symbols-outlined">pending_actions</div>
+            <div class="stat-icon"><span class="stat-icon-symbol material-symbols-outlined">pending_actions</span></div>
         </div>
         <div class="stat-number">{{ stats.open_invoices }}</div>
         <div class="stat-helper">Aktuell nicht vollständig ausgeglichen</div>
@@ -24,7 +24,7 @@
     <div class="stat-card stat-partial">
         <div class="stat-card-top">
             <div class="stat-label">Teiloffen</div>
-            <div class="stat-icon material-symbols-outlined">difference</div>
+            <div class="stat-icon"><span class="stat-icon-symbol material-symbols-outlined">difference</span></div>
         </div>
         <div class="stat-number">{{ stats.partial_invoices }}</div>
         <div class="stat-helper">Bereits mit Teilzahlung oder Unterdeckung</div>
@@ -32,7 +32,7 @@
     <div class="stat-card stat-paid">
         <div class="stat-card-top">
             <div class="stat-label">Bezahlt</div>
-            <div class="stat-icon material-symbols-outlined">check_circle</div>
+            <div class="stat-icon"><span class="stat-icon-symbol material-symbols-outlined">check_circle</span></div>
         </div>
         <div class="stat-number">{{ stats.paid_invoices }}</div>
         <div class="stat-helper">Inklusive bezahlt mit Mahngebühr</div>
@@ -40,23 +40,15 @@
     <div class="stat-card stat-over">
         <div class="stat-card-top">
             <div class="stat-label">Überzahlung</div>
-            <div class="stat-icon material-symbols-outlined">north</div>
+            <div class="stat-icon"><span class="stat-icon-symbol material-symbols-outlined">north</span></div>
         </div>
         <div class="stat-number">{{ stats.overpaid_invoices }}</div>
         <div class="stat-helper">Prüfbedarf bei überzahlten Rechnungen</div>
     </div>
-    <div class="stat-card stat-neutral">
-        <div class="stat-card-top">
-            <div class="stat-label">Offener Betrag gesamt</div>
-            <div class="stat-icon material-symbols-outlined">account_balance_wallet</div>
-        </div>
-        <div class="stat-number">{{ stats.open_sum | format_eur }}</div>
-        <div class="stat-helper">Summe aller noch offenen Abweichungen</div>
-    </div>
     <div class="stat-card stat-warn">
         <div class="stat-card-top">
             <div class="stat-label">Mahnungen</div>
-            <div class="stat-icon material-symbols-outlined">notification_important</div>
+            <div class="stat-icon"><span class="stat-icon-symbol material-symbols-outlined">notification_important</span></div>
         </div>
         <div class="stat-number">{{ stats.mahnung_1 + stats.mahnung_2 + stats.mahnung_3 }}</div>
         <div class="stat-helper">{{ stats.mahnung_1 }}× erste, {{ stats.mahnung_2 }}× zweite, {{ stats.mahnung_3 }}× dritte Mahnung</div>
@@ -64,7 +56,7 @@
     <div class="stat-card stat-neutral">
         <div class="stat-card-top">
             <div class="stat-label">Nicht zugeordnet</div>
-            <div class="stat-icon material-symbols-outlined">link_off</div>
+            <div class="stat-icon"><span class="stat-icon-symbol material-symbols-outlined">link_off</span></div>
         </div>
         <div class="stat-number">{{ stats.unmatched_payments }}</div>
         <div class="stat-helper">Zahlungen ohne aktuelle Zuordnung</div>
@@ -72,10 +64,18 @@
     <div class="stat-card stat-neutral">
         <div class="stat-card-top">
             <div class="stat-label">Rechnungen gesamt</div>
-            <div class="stat-icon material-symbols-outlined">receipt_long</div>
+            <div class="stat-icon"><span class="stat-icon-symbol material-symbols-outlined">receipt_long</span></div>
         </div>
         <div class="stat-number">{{ stats.total_invoices }}</div>
         <div class="stat-helper">Aktueller Bestand in der Datenbank</div>
+    </div>
+    <div class="stat-card stat-neutral">
+        <div class="stat-card-top">
+            <div class="stat-label">Offener Betrag gesamt</div>
+            <div class="stat-icon"><span class="stat-icon-symbol material-symbols-outlined">account_balance_wallet</span></div>
+        </div>
+        <div class="stat-number">{{ stats.open_sum | format_eur }}</div>
+        <div class="stat-helper">Summe aller noch offenen Abweichungen</div>
     </div>
 </div>
 

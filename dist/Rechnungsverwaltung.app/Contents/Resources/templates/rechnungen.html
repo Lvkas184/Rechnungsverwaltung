@@ -2,6 +2,7 @@
 {% block title %}Rechnungen — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
+<div class="list-focus-page" data-list-focus-page>
 <div class="page-hero">
     <div>
         <p class="page-kicker">Rechnungen</p>
@@ -10,6 +11,10 @@
             Durchsuchen, filtern und prüfen Sie den gesamten Rechnungsbestand inklusive Status, Mahnstufe, Mahnungsdatum und Bemerkungen.
         </p>
     </div>
+    <button type="button" class="table-focus-toggle" data-table-focus-toggle title="Nur Tabelle anzeigen" aria-pressed="false">
+        <span class="material-symbols-outlined" data-table-focus-icon>fullscreen</span>
+        <span class="table-focus-toggle-label" data-table-focus-label>Nur Tabelle</span>
+    </button>
 </div>
 
 <div class="filter-bar">
@@ -40,7 +45,7 @@
 </div>
 
 {% if invoices %}
-<div class="card">
+<div class="card table-focus-panel">
     <p class="page-kicker">Liste</p>
     <h2>Rechnungsübersicht</h2>
     <p class="page-desc" style="margin-bottom: 16px;">Sortierung, Statusfilter und Paginierung bleiben vollständig erhalten.</p>
@@ -134,4 +139,8 @@
     <a href="{{ url_for('upload') }}" class="btn btn-primary">📤 Rechnungen importieren</a>
 </div>
 {% endif %}
+<button type="button" class="table-focus-fab" data-table-focus-toggle title="Normale Ansicht wiederherstellen" aria-pressed="false">
+    <span class="material-symbols-outlined" data-table-focus-icon>fullscreen</span>
+</button>
+</div>
 {% endblock %}

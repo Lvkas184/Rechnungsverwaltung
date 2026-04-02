@@ -2,6 +2,7 @@
 {% block title %}Zahlungen — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
+<div class="list-focus-page" data-list-focus-page>
 <div class="page-hero">
     <div>
         <p class="page-kicker">Zahlungen</p>
@@ -10,6 +11,10 @@
             Prüfen Sie Bankimporte, filtern Sie nach Status und Quelle und springen Sie direkt in die jeweilige Zahlung oder Rechnung.
         </p>
     </div>
+    <button type="button" class="table-focus-toggle" data-table-focus-toggle title="Nur Tabelle anzeigen" aria-pressed="false">
+        <span class="material-symbols-outlined" data-table-focus-icon>fullscreen</span>
+        <span class="table-focus-toggle-label" data-table-focus-label>Nur Tabelle</span>
+    </button>
 </div>
 
 <div class="filter-bar">
@@ -49,7 +54,7 @@
 </div>
 
 {% if payments %}
-<div class="card">
+<div class="card table-focus-panel">
     <p class="page-kicker">Bankdaten</p>
     <h2>Zahlungsübersicht</h2>
     <p class="page-desc" style="margin-bottom: 16px;">Alle bisherigen Such-, Bank- und Statusfilter bleiben unverändert verfügbar.</p>
@@ -154,4 +159,8 @@
     <a href="{{ url_for('upload') }}" class="btn btn-primary">📤 Kontoauszug importieren</a>
 </div>
 {% endif %}
+<button type="button" class="table-focus-fab" data-table-focus-toggle title="Normale Ansicht wiederherstellen" aria-pressed="false">
+    <span class="material-symbols-outlined" data-table-focus-icon>fullscreen</span>
+</button>
+</div>
 {% endblock %}

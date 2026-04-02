@@ -8,6 +8,7 @@ const ZOOM_DEFAULT_PERCENT = 100;
 const ZOOM_MIN_PERCENT = 70;
 const ZOOM_MAX_PERCENT = 170;
 const ZOOM_STEP_PERCENT = 10;
+const SIDEBAR_STORAGE_KEY = "rechnungsverwaltung.sidebar_collapsed";
 
 function clampZoomPercent(value) {
     return Math.min(ZOOM_MAX_PERCENT, Math.max(ZOOM_MIN_PERCENT, value));
@@ -59,9 +60,91 @@ function handleZoomShortcut(event) {
     }
 }
 
+function getStoredSidebarCollapsed() {
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+}
+
+function applySidebarCollapsed(collapsed) {
+    const shell = document.querySelector(".app-shell");
+    const toggle = document.querySelector("[data-sidebar-toggle]");
+    if (!shell || !toggle) return;
+
+    shell.classList.toggle("sidebar-collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-label", collapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen");
+
+    const icon = toggle.querySelector(".material-symbols-outlined");
+    if (icon) {
+        icon.textContent = collapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left";
+    }
+
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? "1" : "0");
+}
+
+function initSidebarToggle() {
+    const toggle = document.querySelector("[data-sidebar-toggle]");
+    if (!toggle) return;
+
+    applySidebarCollapsed(getStoredSidebarCollapsed());
+    toggle.addEventListener("click", function () {
+        const shell = document.querySelector(".app-shell");
+        if (!shell) return;
+        applySidebarCollapsed(!shell.classList.contains("sidebar-collapsed"));
+    });
+}
+
+function setTableFocusMode(active) {
+    const shell = document.querySelector(".app-shell");
+    const page = document.querySelector("[data-list-focus-page]");
+    if (!shell || !page) return;
+
+    shell.classList.toggle("table-focus-mode", active);
+    page.classList.toggle("table-focus-active", active);
+
+    const toggles = page.querySelectorAll("[data-table-focus-toggle]");
+    toggles.forEach(function (toggle) {
+        toggle.setAttribute("aria-pressed", String(active));
+        toggle.setAttribute("title", active ? "Normale Ansicht wiederherstellen" : "Nur Tabelle anzeigen");
+
+        const icon = toggle.querySelector("[data-table-focus-icon]");
+        if (icon) {
+            icon.textContent = active ? "fullscreen_exit" : "fullscreen";
+        }
+
+        const label = toggle.querySelector("[data-table-focus-label]");
+        if (label) {
+            label.textContent = active ? "Normale Ansicht" : "Nur Tabelle";
+        }
+    });
+}
+
+function initTableFocusMode() {
+    const page = document.querySelector("[data-list-focus-page]");
+    if (!page) return;
+
+    const toggles = page.querySelectorAll("[data-table-focus-toggle]");
+    toggles.forEach(function (toggle) {
+        toggle.addEventListener("click", function () {
+            const shell = document.querySelector(".app-shell");
+            if (!shell) return;
+            setTableFocusMode(!shell.classList.contains("table-focus-mode"));
+        });
+    });
+
+    document.addEventListener("keydown", function (event) {
+        const shell = document.querySelector(".app-shell");
+        if (!shell || !shell.classList.contains("table-focus-mode")) return;
+        if (event.key === "Escape") {
+            setTableFocusMode(false);
+        }
+    });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     applyZoomPercent(getStoredZoomPercent());
     document.addEventListener("keydown", handleZoomShortcut);
+    initSidebarToggle();
+    initTableFocusMode();
 
     // === Drag & Drop + File Select for Upload ===
     const forms = ["rechnungen", "sparkasse", "voba_kraichgau", "voba_pur"];
