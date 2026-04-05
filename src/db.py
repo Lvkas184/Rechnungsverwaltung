@@ -6,17 +6,41 @@ import sqlite3
 import json
 import shutil
 
+
+def _safe_copy(src_path, dst_path):
+    """Copy file if source exists and destination does not exist yet."""
+    if os.path.exists(src_path) and not os.path.exists(dst_path):
+        shutil.copy2(src_path, dst_path)
+
+
 # Determine data storage location
 if getattr(sys, 'frozen', False):
     # Running as bundled executable (e.g., via PyInstaller)
-    # Store database in the user's Documents folder so it persists across updates
-    USER_DOCS = os.path.join(os.path.expanduser("~"), "Documents", "Rechnungsverwaltung_Daten")
-    os.makedirs(USER_DOCS, exist_ok=True)
-    DB_PATH = os.path.join(USER_DOCS, "rechnungsverwaltung.db")
+    home_dir = os.path.expanduser("~")
+    legacy_docs_dir = os.path.join(home_dir, "Documents", "Rechnungsverwaltung_Daten")
+    # On macOS, Application Support is the safer writable app data path.
+    if sys.platform == "darwin":
+        user_data_dir = os.path.join(home_dir, "Library", "Application Support", "Rechnungsverwaltung_Daten")
+    else:
+        user_data_dir = legacy_docs_dir
+
+    os.makedirs(user_data_dir, exist_ok=True)
+    DB_PATH = os.path.join(user_data_dir, "rechnungsverwaltung.db")
     # PyInstaller extracts bundled files to sys._MEIPASS
     SCHEMA_PATH = os.path.join(sys._MEIPASS, "schema", "schema.sql")
     BUNDLED_PARAM_PATH = os.path.join(sys._MEIPASS, "parameters.json")
-    PARAM_PATH = os.path.join(USER_DOCS, "parameters.json")
+    PARAM_PATH = os.path.join(user_data_dir, "parameters.json")
+
+    # One-time migration from legacy Documents path (used by older builds).
+    legacy_db_path = os.path.join(legacy_docs_dir, "rechnungsverwaltung.db")
+    legacy_param_path = os.path.join(legacy_docs_dir, "parameters.json")
+    if user_data_dir != legacy_docs_dir:
+        try:
+            _safe_copy(legacy_db_path, DB_PATH)
+            _safe_copy(legacy_param_path, PARAM_PATH)
+        except Exception:
+            pass
+
     if not os.path.exists(PARAM_PATH):
         try:
             shutil.copy2(BUNDLED_PARAM_PATH, PARAM_PATH)
@@ -33,7 +57,11 @@ else:
 
 def get_db(db_path=None):
     """Return a new SQLite connection with Row factory enabled."""
-    conn = sqlite3.connect(db_path or DB_PATH)
+    path = os.path.abspath(db_path or DB_PATH)
+    data_dir = os.path.dirname(path)
+    if data_dir:
+        os.makedirs(data_dir, exist_ok=True)
+    conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

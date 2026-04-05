@@ -29,7 +29,13 @@ if __name__ == '__main__':
     
     # Open the PyWebView native window
     # This blocks until the window is closed
-    webview.create_window('Rechnungsverwaltung', 'http://127.0.0.1:5000/', width=1400, height=900)
+    webview.create_window(
+        'Rechnungsverwaltung',
+        'http://127.0.0.1:5000/',
+        width=1400,
+        height=900,
+        text_select=True,
+    )
     webview.start()
     
     # The daemon thread will automatically be killed when script exits.

@@ -41,23 +41,67 @@ DEFAULT_PARAMS = {
     "mahngebuehr_2_eur": 0.0,
     "mahngebuehr_3_eur": 0.0,
     "mahngebuehr_eur": 0.0,
+    "custom_invoice_statuses": [],
+    "custom_payment_statuses": [],
+    "custom_invoice_status_colors": {},
+    "custom_payment_status_colors": {},
     "date_origin": "1899-12-30",
 }
-MANUAL_INVOICE_STATUSES = {
+MANUAL_INVOICE_STATUS_ORDER = [
     "Offen",
     "In Klärung",
     "Bezahlt",
     "Bezahlt mit Mahngebühr",
     "Teiloffen/Unterzahlung",
     "Überzahlung",
+    "ausgebucht",
+    "Gutschrift",
     "Akonto",
     "Schadensrechnungen",
-}
-MANUAL_PAYMENT_STATUSES = {
+]
+MANUAL_PAYMENT_STATUS_ORDER = [
     "Offen",
     "Zugeordnet",
     "Akonto",
     "Schadensrechnungen",
+]
+MANUAL_INVOICE_STATUSES = set(MANUAL_INVOICE_STATUS_ORDER)
+MANUAL_PAYMENT_STATUSES = set(MANUAL_PAYMENT_STATUS_ORDER)
+
+STATUS_COLOR_PRESETS = {
+    "grau": {"bg": "#e5e7eb", "text": "#4b5563", "border": "#d1d5db"},
+    "gruen": {"bg": "#dcfce7", "text": "#15803d", "border": "#bbf7d0"},
+    "rot": {"bg": "#fee2e2", "text": "#c2410c", "border": "#fecaca"},
+    "orange": {"bg": "#ffedd5", "text": "#c2410c", "border": "#fed7aa"},
+    "blau": {"bg": "#dbeafe", "text": "#1d4ed8", "border": "#bfdbfe"},
+    "lila": {"bg": "#ede9fe", "text": "#7c3aed", "border": "#ddd6fe"},
+    "gelb": {"bg": "#fef9c3", "text": "#a16207", "border": "#fde68a"},
+    "tuerkis": {"bg": "#ccfbf1", "text": "#0f766e", "border": "#99f6e4"},
+}
+
+STATUS_COLOR_ALIASES = {
+    "grau": "grau",
+    "gray": "grau",
+    "grey": "grau",
+    "gruen": "gruen",
+    "grun": "gruen",
+    "green": "gruen",
+    "rot": "rot",
+    "red": "rot",
+    "orange": "orange",
+    "blau": "blau",
+    "blue": "blau",
+    "lila": "lila",
+    "violett": "lila",
+    "violet": "lila",
+    "purple": "lila",
+    "gelb": "gelb",
+    "yellow": "gelb",
+    "tuerkis": "tuerkis",
+    "turkis": "tuerkis",
+    "teal": "tuerkis",
+    "turquoise": "tuerkis",
+    "cyan": "tuerkis",
 }
 
 
@@ -147,6 +191,231 @@ def _save_app_params(params):
         json.dump(params, f, ensure_ascii=False, indent=2)
 
 
+def _status_sort_unique(values):
+    unique = []
+    seen = set()
+    for raw in values:
+        value = str(raw or "").strip()
+        if not value:
+            continue
+        key = value.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(value)
+    return unique
+
+
+def _normalize_ascii_key(value):
+    s = str(value or "").strip().lower()
+    replacements = {
+        "ä": "ae",
+        "ö": "oe",
+        "ü": "ue",
+        "ß": "ss",
+    }
+    for old, new in replacements.items():
+        s = s.replace(old, new)
+    return s
+
+
+def _parse_custom_statuses_input(raw_value):
+    if raw_value is None:
+        return []
+
+    if isinstance(raw_value, (list, tuple, set)):
+        raw_items = list(raw_value)
+    else:
+        raw_items = str(raw_value).splitlines()
+
+    statuses = []
+    for item in raw_items:
+        for chunk in re.split(r"[;,]", str(item or "")):
+            value = chunk.strip()
+            if not value:
+                continue
+            if len(value) > 60:
+                raise ValueError("Jeder Zusatz-Status darf maximal 60 Zeichen haben.")
+            statuses.append(value)
+
+    statuses = _status_sort_unique(statuses)
+    if len(statuses) > 50:
+        raise ValueError("Maximal 50 Zusatz-Status pro Bereich erlaubt.")
+    return statuses
+
+
+def _parse_custom_status_colors_input(raw_value, allowed_statuses, strict=True):
+    if raw_value is None:
+        return {}
+
+    allowed_lookup = {str(s).strip().casefold(): str(s).strip() for s in (allowed_statuses or []) if str(s).strip()}
+    result = {}
+
+    raw_pairs = []
+    if isinstance(raw_value, dict):
+        raw_pairs = list(raw_value.items())
+    else:
+        if isinstance(raw_value, (list, tuple, set)):
+            raw_lines = [str(item or "") for item in raw_value]
+        else:
+            raw_lines = str(raw_value).splitlines()
+        for idx, raw_line in enumerate(raw_lines, start=1):
+            line = str(raw_line or "").strip()
+            if not line:
+                continue
+            parts = re.split(r"\s*[:=]\s*", line, maxsplit=1)
+            if len(parts) != 2:
+                if strict:
+                    raise ValueError(
+                        f"Zeile {idx} bei Status-Farben ist ungültig. Format: Status=Farbe."
+                    )
+                continue
+            raw_pairs.append((parts[0], parts[1]))
+
+    if len(raw_pairs) > 100:
+        raise ValueError("Maximal 100 Status-Farbzuordnungen pro Bereich erlaubt.")
+
+    for raw_status, raw_color in raw_pairs:
+        status_label = str(raw_status or "").strip()
+        color_name = str(raw_color or "").strip()
+        if not status_label:
+            if strict:
+                raise ValueError("Statusname in der Farbzuordnung darf nicht leer sein.")
+            continue
+        if not color_name:
+            if strict:
+                raise ValueError(f"Farbwert für Status '{status_label}' darf nicht leer sein.")
+            continue
+
+        status_key = status_label.casefold()
+        canonical_status = allowed_lookup.get(status_key)
+        if not canonical_status:
+            if strict:
+                raise ValueError(
+                    f"Status '{status_label}' ist unbekannt. Bitte zuerst als Status anlegen."
+                )
+            continue
+
+        normalized_color = _normalize_ascii_key(color_name)
+        normalized_color = re.sub(r"[\s_-]+", "", normalized_color)
+        canonical_color = STATUS_COLOR_ALIASES.get(normalized_color)
+        if not canonical_color:
+            if strict:
+                allowed_colors = ", ".join(sorted(STATUS_COLOR_PRESETS.keys()))
+                raise ValueError(
+                    f"Farbe '{color_name}' ist ungültig. Erlaubt: {allowed_colors}."
+                )
+            continue
+
+        result[canonical_status] = canonical_color
+
+    return result
+
+
+def _status_color_map_to_text(statuses, color_map):
+    if not isinstance(color_map, dict):
+        return ""
+    lines = []
+    known = {str(s).strip().casefold() for s in (statuses or [])}
+    seen = set()
+    for status in statuses or []:
+        status_label = str(status or "").strip()
+        if not status_label:
+            continue
+        color = color_map.get(status_label)
+        if color:
+            lines.append(f"{status_label}={color}")
+            seen.add(status_label.casefold())
+    # Fallback for unknown entries that may still exist in config.
+    for status_label in sorted(color_map.keys(), key=lambda x: str(x).casefold()):
+        key = str(status_label or "").strip().casefold()
+        if not key or key in seen:
+            continue
+        if known and key not in known:
+            continue
+        lines.append(f"{status_label}={color_map[status_label]}")
+    return "\n".join(lines)
+
+
+def _status_badge_inline_style(status, kind, status_cfg):
+    value = str(status or "").strip()
+    if not value:
+        return ""
+    mapping = (
+        status_cfg.get("invoice_status_colors", {})
+        if kind == "invoice"
+        else status_cfg.get("payment_status_colors", {})
+    )
+    if not isinstance(mapping, dict):
+        return ""
+
+    color_key = None
+    target_key = value.casefold()
+    for status_name, configured_color in mapping.items():
+        if str(status_name or "").strip().casefold() == target_key:
+            color_key = configured_color
+            break
+
+    if not color_key:
+        return ""
+    palette = STATUS_COLOR_PRESETS.get(str(color_key))
+    if not palette:
+        return ""
+    return (
+        f"background: {palette['bg']}; "
+        f"color: {palette['text']}; "
+        f"border-color: {palette['border']};"
+    )
+
+
+def _status_options_from_params(params=None):
+    source = params if isinstance(params, dict) else _load_app_params()
+    try:
+        extra_invoice = _parse_custom_statuses_input(source.get("custom_invoice_statuses", []))
+    except ValueError:
+        extra_invoice = []
+    try:
+        extra_payment = _parse_custom_statuses_input(source.get("custom_payment_statuses", []))
+    except ValueError:
+        extra_payment = []
+
+    invoice_statuses = _status_sort_unique(MANUAL_INVOICE_STATUS_ORDER + extra_invoice)
+    payment_statuses = _status_sort_unique(MANUAL_PAYMENT_STATUS_ORDER + extra_payment)
+    invoice_status_colors = _parse_custom_status_colors_input(
+        source.get("custom_invoice_status_colors", {}),
+        invoice_statuses,
+        strict=False,
+    )
+    payment_status_colors = _parse_custom_status_colors_input(
+        source.get("custom_payment_status_colors", {}),
+        payment_statuses,
+        strict=False,
+    )
+    return {
+        "invoice_statuses": invoice_statuses,
+        "payment_statuses": payment_statuses,
+        "invoice_status_colors": invoice_status_colors,
+        "payment_status_colors": payment_status_colors,
+    }
+
+
+def _status_options_with_current(statuses, current_status):
+    options = list(statuses or [])
+    current = str(current_status or "").strip()
+    if not current:
+        return options
+    if current.casefold() not in {item.casefold() for item in options}:
+        options.append(current)
+    return options
+
+
+def _redirect_to_next(default_endpoint, **default_values):
+    next_url = (request.form.get("next") or request.args.get("next") or "").strip()
+    if next_url.startswith("/") and not next_url.startswith("//"):
+        return redirect(next_url)
+    return redirect(url_for(default_endpoint, **default_values))
+
+
 def _payment_effective_status_sql(alias="payments"):
     """SQL CASE expression for effective payment status (manual override aware)."""
     return f"""
@@ -154,6 +423,7 @@ def _payment_effective_status_sql(alias="payments"):
             WHEN COALESCE({alias}.status_manual, 0) = 1
                  AND COALESCE({alias}.status_override, '') <> ''
             THEN {alias}.status_override
+            WHEN COALESCE({alias}.amount_eur, 0) < 0 THEN 'Zugeordnet'
             WHEN COALESCE({alias}.matched, 0) = 1 THEN 'Zugeordnet'
             WHEN COALESCE({alias}.akonto, 0) = 1 THEN 'Akonto'
             WHEN COALESCE({alias}.schadensrechnung, 0) = 1 THEN 'Schadensrechnungen'
@@ -167,9 +437,11 @@ def payment_effective_status(payment):
     status_manual = int((payment["status_manual"] if "status_manual" in payment.keys() else 0) or 0)
     if status_manual == 1:
         override = str((payment["status_override"] if "status_override" in payment.keys() else "") or "").strip()
-        if override in MANUAL_PAYMENT_STATUSES:
+        if override:
             return override
 
+    if float((payment["amount_eur"] if "amount_eur" in payment.keys() else 0) or 0) < 0:
+        return "Zugeordnet"
     if int((payment["matched"] if "matched" in payment.keys() else 0) or 0) == 1:
         return "Zugeordnet"
     if int((payment["akonto"] if "akonto" in payment.keys() else 0) or 0) == 1:
@@ -181,8 +453,17 @@ def payment_effective_status(payment):
 
 @app.context_processor
 def _inject_template_helpers():
+    status_cfg = _status_options_from_params()
+
+    def status_inline_style(status, kind="invoice"):
+        return _status_badge_inline_style(status, kind, status_cfg)
+
     return {
         "payment_effective_status": payment_effective_status,
+        "invoice_status_options": status_cfg["invoice_statuses"],
+        "payment_status_options": status_cfg["payment_statuses"],
+        "invoice_status_filter_options": status_cfg["invoice_statuses"],
+        "status_inline_style": status_inline_style,
     }
 
 
@@ -305,6 +586,19 @@ def dashboard():
 @app.route("/einstellungen", methods=["GET", "POST"])
 def einstellungen():
     params = _load_app_params()
+    status_cfg = _status_options_from_params(params)
+    custom_invoice_statuses_text = "\n".join(
+        [s for s in status_cfg["invoice_statuses"] if s not in MANUAL_INVOICE_STATUSES]
+    )
+    custom_payment_statuses_text = "\n".join(
+        [s for s in status_cfg["payment_statuses"] if s not in MANUAL_PAYMENT_STATUSES]
+    )
+    custom_invoice_status_colors_text = _status_color_map_to_text(
+        status_cfg["invoice_statuses"], status_cfg.get("invoice_status_colors", {})
+    )
+    custom_payment_status_colors_text = _status_color_map_to_text(
+        status_cfg["payment_statuses"], status_cfg.get("payment_status_colors", {})
+    )
     if request.method == "POST":
         try:
             mahngebuehr_1 = _parse_eur((request.form.get("mahngebuehr_1_eur", "") or "").strip() or "0")
@@ -318,11 +612,42 @@ def einstellungen():
             flash("Mahngebühren dürfen nicht negativ sein.", "error")
             return redirect(url_for("einstellungen"))
 
+        try:
+            custom_invoice_statuses = _parse_custom_statuses_input(
+                request.form.get("custom_invoice_statuses", "")
+            )
+            custom_payment_statuses = _parse_custom_statuses_input(
+                request.form.get("custom_payment_statuses", "")
+            )
+            allowed_invoice_statuses = _status_sort_unique(
+                MANUAL_INVOICE_STATUS_ORDER + custom_invoice_statuses
+            )
+            allowed_payment_statuses = _status_sort_unique(
+                MANUAL_PAYMENT_STATUS_ORDER + custom_payment_statuses
+            )
+            custom_invoice_status_colors = _parse_custom_status_colors_input(
+                request.form.get("custom_invoice_status_colors", ""),
+                allowed_invoice_statuses,
+                strict=True,
+            )
+            custom_payment_status_colors = _parse_custom_status_colors_input(
+                request.form.get("custom_payment_status_colors", ""),
+                allowed_payment_statuses,
+                strict=True,
+            )
+        except ValueError as e:
+            flash(str(e), "error")
+            return redirect(url_for("einstellungen"))
+
         params["mahngebuehr_1_eur"] = round(mahngebuehr_1, 2)
         params["mahngebuehr_2_eur"] = round(mahngebuehr_2, 2)
         params["mahngebuehr_3_eur"] = round(mahngebuehr_3, 2)
         # Legacy-Parameter für Abwärtskompatibilität
         params["mahngebuehr_eur"] = round(mahngebuehr_1, 2)
+        params["custom_invoice_statuses"] = custom_invoice_statuses
+        params["custom_payment_statuses"] = custom_payment_statuses
+        params["custom_invoice_status_colors"] = custom_invoice_status_colors
+        params["custom_payment_status_colors"] = custom_payment_status_colors
         try:
             _save_app_params(params)
             update_all()
@@ -331,7 +656,14 @@ def einstellungen():
             flash(f"Fehler beim Speichern der Einstellungen: {e}", "error")
         return redirect(url_for("einstellungen"))
 
-    return render_template("einstellungen.html", params=params)
+    return render_template(
+        "einstellungen.html",
+        params=params,
+        custom_invoice_statuses_text=custom_invoice_statuses_text,
+        custom_payment_statuses_text=custom_payment_statuses_text,
+        custom_invoice_status_colors_text=custom_invoice_status_colors_text,
+        custom_payment_status_colors_text=custom_payment_status_colors_text,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +673,7 @@ def einstellungen():
 @app.route("/rechnungen")
 def rechnungen():
     conn = get_db()
+    status_cfg = _status_options_from_params()
     # Persist sorting preference across navigation/tab changes.
     saved_sort_col = session.get("rechnungen_sort_col", "invoice_id")
     saved_order = session.get("rechnungen_order", "asc")
@@ -350,9 +683,9 @@ def rechnungen():
     page = max(1, int(request.args.get("page", 1)))
     sort_col = request.args.get("sort", saved_sort_col)
     order = request.args.get("order", saved_order).lower()
-    per_page = int(request.args.get("per_page", 50))
+    per_page = int(request.args.get("per_page", 500))
     if per_page not in [20, 50, 100, 200, 500]:
-        per_page = 50
+        per_page = 500
 
     # Validate sorting
     valid_cols = [
@@ -400,14 +733,19 @@ def rechnungen():
     conn.close()
 
     total_pages = max(1, (total + per_page - 1) // per_page)
+    invoice_status_filter_options = _status_options_with_current(
+        status_cfg["invoice_statuses"], status_filter
+    )
     return render_template("rechnungen.html", invoices=invoices, page=page,
                            total_pages=total_pages, total=total,
                            status_filter=status_filter, search=search,
-                           sort_col=sort_col, order=order, per_page=per_page)
+                           sort_col=sort_col, order=order, per_page=per_page,
+                           invoice_status_filter_options=invoice_status_filter_options)
 
 
 @app.route("/rechnungen/<int:invoice_id>")
 def rechnung_detail(invoice_id):
+    status_cfg = _status_options_from_params()
     conn = get_db()
     inv = conn.execute("SELECT * FROM invoices WHERE invoice_id = ?", (invoice_id,)).fetchone()
     if not inv:
@@ -422,7 +760,17 @@ def rechnung_detail(invoice_id):
     ).fetchall()
     reminder_history = fetch_invoice_reminder_history(conn, invoice_id, invoice_row=inv)
     conn.close()
-    return render_template("rechnung_detail.html", inv=inv, payments=payments, audit=audit, reminder_history=reminder_history)
+    invoice_status_options = _status_options_with_current(
+        status_cfg["invoice_statuses"], inv["status"] if inv else ""
+    )
+    return render_template(
+        "rechnung_detail.html",
+        inv=inv,
+        payments=payments,
+        audit=audit,
+        reminder_history=reminder_history,
+        invoice_status_options=invoice_status_options,
+    )
 
 
 @app.route("/rechnungen/<int:invoice_id>/bemerkung", methods=["POST"])
@@ -463,12 +811,62 @@ def rechnung_update_bemerkung(invoice_id):
     return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
 
 
+@app.route("/rechnungen/<int:invoice_id>/betrag", methods=["POST"])
+def rechnung_update_betrag(invoice_id):
+    raw_amount = (request.form.get("amount_gross") or "").strip()
+    try:
+        amount = _parse_eur(raw_amount)
+    except ValueError:
+        flash("Betrag ist ungültig (z.B. 1144,78).", "error")
+        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+    if amount < 0:
+        flash("Rechnungsbetrag darf nicht negativ sein.", "error")
+        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT invoice_id FROM invoices WHERE invoice_id = ?",
+            (invoice_id,),
+        ).fetchone()
+        if not row:
+            flash("Rechnung nicht gefunden.", "error")
+            return redirect(url_for("rechnungen"))
+
+        conn.execute(
+            """
+            UPDATE invoices
+            SET amount_gross = ?,
+                updated_at = ?
+            WHERE invoice_id = ?
+            """,
+            (amount, datetime.utcnow().isoformat(), invoice_id),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        flash(f"Fehler beim Speichern des Rechnungsbetrags: {e}", "error")
+        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+    finally:
+        conn.close()
+
+    try:
+        update_all()
+        flash("✅ Rechnungsbetrag gespeichert und Status neu berechnet.", "success")
+    except Exception as e:
+        flash(f"Rechnungsbetrag gespeichert, aber Status-Neuberechnung fehlgeschlagen: {e}", "error")
+
+    return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+
+
 @app.route("/rechnungen/<int:invoice_id>/status", methods=["POST"])
 def rechnung_update_status(invoice_id):
     status = (request.form.get("status") or "").strip()
-    if status not in MANUAL_INVOICE_STATUSES:
+    allowed_statuses = set(_status_options_from_params()["invoice_statuses"])
+    if status not in allowed_statuses:
         flash("Ungültiger Rechnungsstatus.", "error")
-        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+        return _redirect_to_next("rechnung_detail", invoice_id=invoice_id)
 
     conn = get_db()
     try:
@@ -498,7 +896,7 @@ def rechnung_update_status(invoice_id):
     finally:
         conn.close()
 
-    return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+    return _redirect_to_next("rechnung_detail", invoice_id=invoice_id)
 
 
 @app.route("/rechnungen/<int:invoice_id>/status/auto", methods=["POST"])
@@ -525,7 +923,7 @@ def rechnung_reset_status_auto(invoice_id):
     except Exception as e:
         conn.rollback()
         flash(f"Fehler beim Aktivieren der Status-Automatik: {e}", "error")
-        return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+        return _redirect_to_next("rechnung_detail", invoice_id=invoice_id)
     finally:
         conn.close()
 
@@ -534,7 +932,7 @@ def rechnung_reset_status_auto(invoice_id):
     except Exception:
         pass
     flash("✅ Status-Automatik für diese Rechnung wieder aktiviert.", "success")
-    return redirect(url_for("rechnung_detail", invoice_id=invoice_id))
+    return _redirect_to_next("rechnung_detail", invoice_id=invoice_id)
 
 
 @app.route("/rechnungen/<int:invoice_id>/mahnung", methods=["POST"])
@@ -643,9 +1041,9 @@ def zahlungen():
     page = max(1, int(request.args.get("page", 1)))
     sort_col = request.args.get("sort", "payment_id")
     order = request.args.get("order", "desc").lower()
-    per_page = int(request.args.get("per_page", 50))
+    per_page = int(request.args.get("per_page", 500))
     if per_page not in [20, 50, 100, 200, 500]:
-        per_page = 50
+        per_page = 500
     if show_type not in ["income", "all", "akonto", "schadens"]:
         show_type = "income"
     effective_status_expr = _payment_effective_status_sql("payments")
@@ -844,6 +1242,7 @@ def zahlungen():
 
 @app.route("/zahlungen/<int:payment_id>")
 def zahlung_detail(payment_id):
+    status_cfg = _status_options_from_params()
     conn = get_db()
     pay = conn.execute("SELECT * FROM payments WHERE payment_id = ?", (payment_id,)).fetchone()
     if not pay:
@@ -888,6 +1287,10 @@ def zahlung_detail(payment_id):
         (payment_id, payment_id),
     ).fetchall()
     conn.close()
+    payment_status_options = _status_options_with_current(
+        status_cfg["payment_statuses"],
+        payment_effective_status(pay),
+    )
     return render_template(
         "zahlung_detail.html",
         pay=pay,
@@ -895,6 +1298,7 @@ def zahlung_detail(payment_id):
         split_invoices=split_invoices,
         parent_payment=parent_payment,
         audit=audit,
+        payment_status_options=payment_status_options,
     )
 
 
@@ -938,9 +1342,10 @@ def zahlung_update_bemerkung(payment_id):
 @app.route("/zahlungen/<int:payment_id>/status", methods=["POST"])
 def zahlung_update_status(payment_id):
     manual_status = (request.form.get("status") or "").strip()
-    if manual_status not in MANUAL_PAYMENT_STATUSES:
+    allowed_statuses = set(_status_options_from_params()["payment_statuses"])
+    if manual_status not in allowed_statuses:
         flash("Ungültiger Zahlungsstatus.", "error")
-        return redirect(url_for("zahlung_detail", payment_id=payment_id))
+        return _redirect_to_next("zahlung_detail", payment_id=payment_id)
 
     conn = get_db()
     target_id = payment_id
@@ -977,7 +1382,7 @@ def zahlung_update_status(payment_id):
     finally:
         conn.close()
 
-    return redirect(url_for("zahlung_detail", payment_id=target_id))
+    return _redirect_to_next("zahlung_detail", payment_id=target_id)
 
 
 @app.route("/zahlungen/<int:payment_id>/status/auto", methods=["POST"])
@@ -1017,7 +1422,7 @@ def zahlung_reset_status_auto(payment_id):
     finally:
         conn.close()
 
-    return redirect(url_for("zahlung_detail", payment_id=target_id))
+    return _redirect_to_next("zahlung_detail", payment_id=target_id)
 
 
 @app.route("/zahlungen/<int:payment_id>/manual/assign", methods=["POST"])

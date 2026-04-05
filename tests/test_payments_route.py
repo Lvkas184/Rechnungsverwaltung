@@ -63,3 +63,49 @@ def test_zahlungen_bank_filter_limits_rows_and_preserves_dropdown(client):
     assert "Sparkassen Zahlung" not in html
     assert '<option value="VoBa Pur" selected>' in html
     assert '<option value="Sparkasse"' in html
+
+
+def test_negative_payment_is_automatically_effective_matched(client):
+    test_client, db_path = client
+
+    conn = _connect(db_path)
+    conn.execute(
+        """
+        INSERT INTO payments(source, booking_date, value_date, amount_eur, reference_text, beneficiary_name, matched)
+        VALUES ('VoBa Pur', '2026-04-03', '2026-04-03', -55.0, 'Ausgangszahlung', 'Lieferant', 0)
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    response = test_client.get("/zahlungen?show=all")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Ausgangszahlung" in html
+    assert "✅ Zugeordnet" in html
+
+
+def test_negative_payment_not_in_unmatched_filter(client):
+    test_client, db_path = client
+
+    conn = _connect(db_path)
+    conn.execute(
+        """
+        INSERT INTO payments(source, booking_date, value_date, amount_eur, reference_text, beneficiary_name, matched)
+        VALUES ('VoBa Pur', '2026-04-03', '2026-04-03', -12.0, 'Negativ', 'Lieferant', 0)
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO payments(source, booking_date, value_date, amount_eur, reference_text, beneficiary_name, matched)
+        VALUES ('VoBa Pur', '2026-04-03', '2026-04-03', 120.0, 'Positiv Offen', 'Kunde', 0)
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    response = test_client.get("/zahlungen?show=all&filter=unmatched")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Positiv Offen" in html
+    assert "Negativ" not in html

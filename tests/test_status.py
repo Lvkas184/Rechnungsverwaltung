@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 import sqlite3
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.status as status_module
@@ -116,6 +118,90 @@ def test_schadensrechnung_for_8xxxxx_invoice():
 
 def test_manual_invoice_statuses_include_in_klaerung():
     assert "In Klärung" in app_module.MANUAL_INVOICE_STATUSES
+
+
+def test_manual_invoice_statuses_include_ausgebucht_and_gutschrift():
+    assert "ausgebucht" in app_module.MANUAL_INVOICE_STATUSES
+    assert "Gutschrift" in app_module.MANUAL_INVOICE_STATUSES
+
+
+def test_status_options_from_params_extend_invoice_and_payment_statuses():
+    cfg = app_module._status_options_from_params(
+        {
+            "custom_invoice_statuses": ["Widerspruch", "widerspruch", "Freigabe intern"],
+            "custom_payment_statuses": ["Zur Prüfung", "zuR prüfung", "Rückfrage Kunde"],
+        }
+    )
+    assert "Widerspruch" in cfg["invoice_statuses"]
+    assert "Freigabe intern" in cfg["invoice_statuses"]
+    assert "Zur Prüfung" in cfg["payment_statuses"]
+    assert "Rückfrage Kunde" in cfg["payment_statuses"]
+    assert cfg["invoice_statuses"].count("Widerspruch") == 1
+    assert cfg["payment_statuses"].count("Zur Prüfung") == 1
+
+
+def test_parse_custom_status_colors_input_accepts_aliases_and_last_wins():
+    mapping = app_module._parse_custom_status_colors_input(
+        "Widerspruch=grün\nOffen=rot\nwiderspruch=blue",
+        ["Offen", "Widerspruch"],
+    )
+    assert mapping == {"Widerspruch": "blau", "Offen": "rot"}
+
+
+def test_parse_custom_status_colors_input_rejects_unknown_color():
+    with pytest.raises(ValueError):
+        app_module._parse_custom_status_colors_input(
+            "Widerspruch=pink",
+            ["Widerspruch"],
+        )
+
+
+def test_status_options_from_params_loads_clean_color_maps():
+    cfg = app_module._status_options_from_params(
+        {
+            "custom_invoice_statuses": ["Widerspruch"],
+            "custom_payment_statuses": ["Zur Prüfung"],
+            "custom_invoice_status_colors": {
+                "Offen": "rot",
+                "Widerspruch": "orange",
+                "Nicht vorhanden": "blau",
+            },
+            "custom_payment_status_colors": {
+                "Zur Prüfung": "lila",
+                "Offen": "gray",
+            },
+        }
+    )
+    assert cfg["invoice_status_colors"]["Offen"] == "rot"
+    assert cfg["invoice_status_colors"]["Widerspruch"] == "orange"
+    assert "Nicht vorhanden" not in cfg["invoice_status_colors"]
+    assert cfg["payment_status_colors"]["Zur Prüfung"] == "lila"
+    assert cfg["payment_status_colors"]["Offen"] == "grau"
+
+
+def test_status_badge_inline_style_uses_configured_palette():
+    style = app_module._status_badge_inline_style(
+        "Widerspruch",
+        "invoice",
+        {"invoice_status_colors": {"Widerspruch": "orange"}},
+    )
+    assert "background: #ffedd5" in style
+    assert "color: #c2410c" in style
+    assert "border-color: #fed7aa" in style
+
+
+def test_payment_effective_status_accepts_manual_custom_override():
+    status = app_module.payment_effective_status(
+        {
+            "status_manual": 1,
+            "status_override": "Zur Prüfung",
+            "amount_eur": 100.0,
+            "matched": 0,
+            "akonto": 0,
+            "schadensrechnung": 0,
+        }
+    )
+    assert status == "Zur Prüfung"
 
 
 def test_update_all_keeps_manual_invoice_status(tmp_path, monkeypatch):

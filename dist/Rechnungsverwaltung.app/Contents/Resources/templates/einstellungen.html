@@ -66,6 +66,62 @@
                 erhalten den Status „Bezahlt mit Mahngebühr“ und werden wie „Bezahlt“ behandelt.
             </small>
         </div>
+
+        <div class="form-group" style="min-width: 100%;">
+            <label for="custom_invoice_statuses">Zusätzliche Rechnungs-Status (optional)</label>
+            <textarea
+                id="custom_invoice_statuses"
+                name="custom_invoice_statuses"
+                class="form-input"
+                rows="4"
+                placeholder="Ein Status pro Zeile, z.B.&#10;Widerspruch&#10;Freigabe intern"
+            >{{ custom_invoice_statuses_text or '' }}</textarea>
+            <small class="text-muted">
+                Diese Status erscheinen in Rechnungs-Filter und in der manuellen Status-Auswahl bei Rechnungen.
+            </small>
+        </div>
+
+        <div class="form-group" style="min-width: 100%;">
+            <label for="custom_payment_statuses">Zusätzliche Zahlungs-Status (optional)</label>
+            <textarea
+                id="custom_payment_statuses"
+                name="custom_payment_statuses"
+                class="form-input"
+                rows="4"
+                placeholder="Ein Status pro Zeile, z.B.&#10;Zur Prüfung&#10;Rückfrage Kunde"
+            >{{ custom_payment_statuses_text or '' }}</textarea>
+            <small class="text-muted">
+                Diese Status erscheinen in der manuellen Status-Auswahl bei Zahlungen.
+            </small>
+        </div>
+
+        <div class="form-group" style="min-width: 100%;">
+            <label for="custom_invoice_status_colors">Farben für Rechnungs-Status (optional)</label>
+            <textarea
+                id="custom_invoice_status_colors"
+                name="custom_invoice_status_colors"
+                class="form-input"
+                rows="5"
+                placeholder="Format: Status=Farbe&#10;Offen=rot&#10;In Klärung=orange&#10;Widerspruch=lila"
+            >{{ custom_invoice_status_colors_text or '' }}</textarea>
+            <small class="text-muted">
+                Erlaubte Farben: grau, gruen, rot, orange, blau, lila, gelb, tuerkis.
+            </small>
+        </div>
+
+        <div class="form-group" style="min-width: 100%;">
+            <label for="custom_payment_status_colors">Farben für Zahlungs-Status (optional)</label>
+            <textarea
+                id="custom_payment_status_colors"
+                name="custom_payment_status_colors"
+                class="form-input"
+                rows="5"
+                placeholder="Format: Status=Farbe&#10;Zugeordnet=gruen&#10;Zur Prüfung=gelb"
+            >{{ custom_payment_status_colors_text or '' }}</textarea>
+            <small class="text-muted">
+                Die Farblogik greift in Listen und Detailansichten.
+            </small>
+        </div>
         <button type="submit" class="btn btn-primary">💾 Einstellungen speichern</button>
     </form>
 </div>

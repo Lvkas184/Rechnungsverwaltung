@@ -16,10 +16,44 @@
 </div>
 
 <div class="metric-strip">
-    <div class="metric-card">
+    <div class="metric-card metric-card-editable" data-amount-editor>
+        <button
+            type="button"
+            class="metric-card-edit-btn"
+            data-amount-editor-toggle
+            aria-label="Rechnungsbetrag bearbeiten"
+            aria-expanded="false"
+            title="Rechnungsbetrag bearbeiten"
+        >
+            <span class="material-symbols-outlined">edit</span>
+        </button>
         <span class="metric-card-label">Betrag brutto</span>
         <div class="metric-card-value">{{ inv.amount_gross | format_eur }}</div>
         <div class="metric-card-caption">{{ inv.name or "Kein Name hinterlegt" }}</div>
+        <div class="metric-card-popover" data-amount-editor-popover hidden>
+            <form
+                method="POST"
+                action="{{ url_for('rechnung_update_betrag', invoice_id=inv.invoice_id) }}"
+                class="metric-card-popover-form"
+                data-amount-editor-form
+            >
+                <label for="invoice_manual_amount" class="metric-card-popover-label">Neuer Betrag (Brutto)</label>
+                <input
+                    id="invoice_manual_amount"
+                    type="text"
+                    name="amount_gross"
+                    class="form-input"
+                    inputmode="decimal"
+                    value="{{ ('%.2f'|format(inv.amount_gross)).replace('.', ',') if inv.amount_gross is not none else '' }}"
+                    placeholder="z.B. 1144,78"
+                    required
+                >
+                <div class="metric-card-popover-actions">
+                    <button type="submit" class="btn btn-primary">💾 Speichern</button>
+                    <button type="button" class="btn btn-secondary" data-amount-editor-cancel>Abbrechen</button>
+                </div>
+            </form>
+        </div>
     </div>
     <div class="metric-card">
         <span class="metric-card-label">Bezahlt</span>
@@ -29,7 +63,8 @@
     <div class="metric-card">
         <span class="metric-card-label">Aktueller Status</span>
         <div style="margin-top: 6px;">
-            <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
+            {% set invoice_status_style = status_inline_style(inv.status, 'invoice') %}
+            <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}"{% if invoice_status_style %} style="{{ invoice_status_style }}"{% endif %}>
                 {{ inv.status or "Offen" }}
             </span>
         </div>
@@ -66,7 +101,8 @@
         <dl class="detail-list">
             <dt>Status</dt>
             <dd>
-                <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
+                {% set invoice_status_style = status_inline_style(inv.status, 'invoice') %}
+                <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}"{% if invoice_status_style %} style="{{ invoice_status_style }}"{% endif %}>
                     {{ inv.status or "Offen" }}
                 </span>
             </dd>
@@ -133,14 +169,9 @@
             <div class="form-group">
                 <label for="invoice_manual_status">Status</label>
                 <select id="invoice_manual_status" name="status" class="form-input">
-                    <option value="Offen" {{ 'selected' if inv.status == 'Offen' }}>Offen</option>
-                    <option value="In Klärung" {{ 'selected' if inv.status == 'In Klärung' }}>In Klärung</option>
-                    <option value="Bezahlt" {{ 'selected' if inv.status == 'Bezahlt' }}>Bezahlt</option>
-                    <option value="Bezahlt mit Mahngebühr" {{ 'selected' if inv.status == 'Bezahlt mit Mahngebühr' }}>Bezahlt mit Mahngebühr</option>
-                    <option value="Teiloffen/Unterzahlung" {{ 'selected' if inv.status == 'Teiloffen/Unterzahlung' }}>Teiloffen/Unterzahlung</option>
-                    <option value="Überzahlung" {{ 'selected' if inv.status == 'Überzahlung' }}>Überzahlung</option>
-                    <option value="Akonto" {{ 'selected' if inv.status == 'Akonto' }}>Akonto</option>
-                    <option value="Schadensrechnungen" {{ 'selected' if inv.status == 'Schadensrechnungen' }}>Schadensrechnungen</option>
+                    {% for status in invoice_status_options %}
+                    <option value="{{ status }}" {{ 'selected' if inv.status == status }}>{{ status }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <button type="submit" class="btn btn-primary">💾 Status speichern</button>
@@ -222,7 +253,7 @@
         <tbody>
             {% for p in payments %}
             {% set payment_link_id = p.parent_payment_id if p.parent_payment_id else p.payment_id %}
-            <tr class="clickable-row" onclick="window.location='{{ url_for('zahlung_detail', payment_id=payment_link_id) }}'">
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('zahlung_detail', payment_id=payment_link_id) }}')">
                 <td>{{ payment_link_id }}</td>
                 <td><span class="badge">{{ p.source or "—" }}</span></td>
                 <td>{{ p.booking_date | format_date }}</td>

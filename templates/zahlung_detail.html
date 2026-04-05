@@ -3,6 +3,7 @@
 
 {% block content %}
 {% set eff_status = payment_effective_status(pay) %}
+{% set payment_status_style = status_inline_style(eff_status, 'payment') %}
 <div class="page-hero">
     <div>
         <p class="page-kicker">Zahlungsdetail</p>
@@ -23,18 +24,18 @@
         <div class="metric-card-caption">{{ pay.booking_date | format_date }} · {{ pay.source or "keine Quelle" }}</div>
     </div>
     <div class="metric-card">
-        <span class="metric-card-label">Status</span>
-        <div style="margin-top: 6px;">
-            {% if eff_status == 'Zugeordnet' %}
-            <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
-            {% elif eff_status == 'Akonto' %}
-            <span class="status-badge status-akonto">🟠 Akonto</span>
-            {% elif eff_status == 'Schadensrechnungen' %}
-            <span class="status-badge status-schadensrechnungen">🟣 Schadensrechnungen</span>
-            {% else %}
-            <span class="status-badge status-offen">Offen</span>
-            {% endif %}
-        </div>
+            <span class="metric-card-label">Status</span>
+            <div style="margin-top: 6px;">
+                {% if eff_status == 'Zugeordnet' %}
+                <span class="status-badge status-bezahlt"{% if payment_status_style %} style="{{ payment_status_style }}"{% endif %}>✅ Zugeordnet</span>
+                {% elif eff_status == 'Akonto' %}
+                <span class="status-badge status-akonto"{% if payment_status_style %} style="{{ payment_status_style }}"{% endif %}>🟠 Akonto</span>
+                {% elif eff_status == 'Schadensrechnungen' %}
+                <span class="status-badge status-schadensrechnungen"{% if payment_status_style %} style="{{ payment_status_style }}"{% endif %}>🟣 Schadensrechnungen</span>
+                {% else %}
+                <span class="status-badge status-{{ eff_status | status_class if eff_status else 'offen' }}"{% if payment_status_style %} style="{{ payment_status_style }}"{% endif %}>{{ eff_status or "Offen" }}</span>
+                {% endif %}
+            </div>
         <div class="metric-card-caption">{{ "Manuell" if pay.status_manual else "Automatisch" }}</div>
     </div>
     <div class="metric-card">
@@ -102,13 +103,13 @@
             <dt>Status</dt>
             <dd>
                 {% if eff_status == 'Zugeordnet' %}
-                <span class="status-badge status-bezahlt">✅ Zugeordnet</span>
+                <span class="status-badge status-bezahlt"{% if payment_status_style %} style="{{ payment_status_style }}"{% endif %}>✅ Zugeordnet</span>
                 {% elif eff_status == 'Akonto' %}
-                <span class="status-badge status-akonto">🟠 Akonto (ohne Matching)</span>
+                <span class="status-badge status-akonto"{% if payment_status_style %} style="{{ payment_status_style }}"{% endif %}>🟠 Akonto (ohne Matching)</span>
                 {% elif eff_status == 'Schadensrechnungen' %}
-                <span class="status-badge status-schadensrechnungen">🟣 Schadensrechnungen (ohne Matching)</span>
+                <span class="status-badge status-schadensrechnungen"{% if payment_status_style %} style="{{ payment_status_style }}"{% endif %}>🟣 Schadensrechnungen (ohne Matching)</span>
                 {% else %}
-                <span class="status-badge status-offen">Offen (Nicht zugeordnet)</span>
+                <span class="status-badge status-{{ eff_status | status_class if eff_status else 'offen' }}"{% if payment_status_style %} style="{{ payment_status_style }}"{% endif %}>{{ eff_status or "Offen" }}</span>
                 {% endif %}
             </dd>
 
@@ -180,10 +181,9 @@
             <div class="form-group">
                 <label for="payment_manual_status">Status</label>
                 <select id="payment_manual_status" name="status" class="form-input">
-                    <option value="Offen" {{ 'selected' if eff_status == 'Offen' }}>Offen (Nicht zugeordnet)</option>
-                    <option value="Zugeordnet" {{ 'selected' if eff_status == 'Zugeordnet' }}>Zugeordnet</option>
-                    <option value="Akonto" {{ 'selected' if eff_status == 'Akonto' }}>Akonto</option>
-                    <option value="Schadensrechnungen" {{ 'selected' if eff_status == 'Schadensrechnungen' }}>Schadensrechnungen</option>
+                    {% for status in payment_status_options %}
+                    <option value="{{ status }}" {{ 'selected' if eff_status == status }}>{{ status }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <button type="submit" class="btn btn-primary">💾 Status speichern</button>
@@ -239,12 +239,13 @@
             </tr>
         </thead>
         <tbody>
-            <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}'">
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}')">
                 <td class="cell-id">{{ inv.invoice_id }}</td>
                 <td>{{ inv.name or "—" }}</td>
                 <td class="cell-amount">{{ inv.amount_gross | format_eur }}</td>
                 <td>
-                    <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
+                    {% set linked_invoice_status_style = status_inline_style(inv.status, 'invoice') %}
+                    <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}"{% if linked_invoice_status_style %} style="{{ linked_invoice_status_style }}"{% endif %}>
                         {{ inv.status or "Offen" }}
                     </span>
                 </td>
@@ -282,13 +283,14 @@
         </thead>
         <tbody>
             {% for split in split_invoices %}
-            <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=split.invoice_id) }}'">
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=split.invoice_id) }}')">
                 <td class="cell-id">{{ split.invoice_id }}</td>
                 <td>{{ split.invoice_name or "—" }}</td>
                 <td class="cell-amount">{{ split.amount_eur | format_eur }}</td>
                 <td class="cell-amount">{{ split.invoice_amount_gross | format_eur }}</td>
                 <td>
-                    <span class="status-badge status-{{ split.invoice_status | status_class if split.invoice_status else 'offen' }}">
+                    {% set split_invoice_status_style = status_inline_style(split.invoice_status, 'invoice') %}
+                    <span class="status-badge status-{{ split.invoice_status | status_class if split.invoice_status else 'offen' }}"{% if split_invoice_status_style %} style="{{ split_invoice_status_style }}"{% endif %}>
                         {{ split.invoice_status or "Offen" }}
                     </span>
                 </td>

@@ -574,6 +574,7 @@ def apply_matching(auto_commit=True):
            WHERE parent_payment_id IS NULL
              AND COALESCE(created_by, '') != 'manual'
              AND COALESCE(status_manual, 0) = 0
+             AND COALESCE(amount_eur, 0) > 0
              AND COALESCE(akonto, 0) = 0
              AND COALESCE(schadensrechnung, 0) = 0
              AND (

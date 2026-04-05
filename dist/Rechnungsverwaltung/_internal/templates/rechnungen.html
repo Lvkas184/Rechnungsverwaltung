@@ -2,6 +2,7 @@
 {% block title %}Rechnungen — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
+{% set current_list_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
 <div class="list-focus-page" data-list-focus-page>
 <div class="page-hero">
     <div>
@@ -22,14 +23,9 @@
         <input type="text" name="q" placeholder="🔍 Suche (Nr., Name oder Bemerkung)…" value="{{ search }}" class="search-input">
         <select name="status" class="filter-select" onchange="this.form.submit()">
             <option value="">Alle Status</option>
-            <option value="Offen" {{ 'selected' if status_filter == 'Offen' }}>🔴 Offen</option>
-            <option value="In Klärung" {{ 'selected' if status_filter == 'In Klärung' }}>🟠 In Klärung</option>
-            <option value="Bezahlt" {{ 'selected' if status_filter == 'Bezahlt' }}>🟢 Bezahlt</option>
-            <option value="Bezahlt mit Mahngebühr" {{ 'selected' if status_filter == 'Bezahlt mit Mahngebühr' }}>✅ Bezahlt mit Mahngebühr</option>
-            <option value="Teiloffen/Unterzahlung" {{ 'selected' if status_filter == 'Teiloffen/Unterzahlung' }}>🟡 Teiloffen</option>
-            <option value="Überzahlung" {{ 'selected' if status_filter == 'Überzahlung' }}>🔵 Überzahlung</option>
-            <option value="Akonto" {{ 'selected' if status_filter == 'Akonto' }}>🟠 Akonto</option>
-            <option value="Schadensrechnungen" {{ 'selected' if status_filter == 'Schadensrechnungen' }}>🟣 Schadensrechnungen</option>
+            {% for status in invoice_status_filter_options %}
+            <option value="{{ status }}" {{ 'selected' if status_filter == status }}>{{ status }}</option>
+            {% endfor %}
         </select>
 
         <select name="per_page" class="filter-select" onchange="this.form.submit()">
@@ -48,14 +44,13 @@
 <div class="card table-focus-panel">
     <p class="page-kicker">Liste</p>
     <h2>Rechnungsübersicht</h2>
-    <p class="page-desc" style="margin-bottom: 16px;">Sortierung, Statusfilter und Paginierung bleiben vollständig erhalten.</p>
-    <div class="table-responsive">
+    <div class="table-responsive sticky-table-shell">
     <table class="data-table rechnungen-table">
         <thead>
             {% macro sort_link(col_id, label) %}
                 {% set new_order = 'asc' if sort_col != col_id or order == 'desc' else 'desc' %}
                 {% set arrow = ' ↑' if sort_col == col_id and order == 'asc' else (' ↓' if sort_col == col_id and order == 'desc' else '') %}
-                <a href="{{ url_for('rechnungen', page=page, status=status_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between;">
+                <a href="{{ url_for('rechnungen', page=page, status=status_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between; width: 100%;">
                     {{ label }}<span style="font-size: 0.8em; color: #888;">{{ arrow }}</span>
                 </a>
             {% endmacro %}
@@ -73,19 +68,43 @@
         </thead>
         <tbody>
             {% for inv in invoices %}
-            <tr class="clickable-row" onclick="window.location='{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}'">
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}')">
                 <td class="cell-id col-invoice">{{ inv.invoice_id }}</td>
                 <td class="cell-name col-name">{{ inv.name or "—" }}</td>
                 <td class="cell-amount col-amount">{{ inv.amount_gross | format_eur }}</td>
                 <td class="cell-amount col-paid">{{ inv.paid_sum_eur | format_eur }}</td>
                 <td class="cell-amount col-deviation">{{ inv.deviation_eur | format_eur }}</td>
-                <td class="col-status">
-                    <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}">
-                        {{ inv.status or "Offen" }}
-                    </span>
+                <td class="col-status inline-status-cell" data-inline-status-cell data-no-row-nav>
+                    {% set current_invoice_status = inv.status or "Offen" %}
+                    {% set invoice_status_style = status_inline_style(current_invoice_status, 'invoice') %}
+                    <button
+                        type="button"
+                        class="status-badge status-{{ current_invoice_status | status_class if current_invoice_status else 'offen' }} inline-status-trigger"
+                        data-inline-status-trigger
+                        {% if invoice_status_style %} style="{{ invoice_status_style }}"{% endif %}
+                        aria-expanded="false"
+                        title="Status ändern"
+                    >
+                        {{ current_invoice_status }}
+                    </button>
                     {% if inv.status_manual %}
                     <span class="badge">manuell</span>
                     {% endif %}
+                    <div class="inline-status-editor" data-inline-status-editor hidden>
+                        <form method="POST" action="{{ url_for('rechnung_update_status', invoice_id=inv.invoice_id) }}" class="inline-status-form" data-no-row-nav>
+                            <input type="hidden" name="next" value="{{ current_list_url }}">
+                            <select name="status" class="inline-status-select">
+                                {% if current_invoice_status not in invoice_status_options %}
+                                <option value="{{ current_invoice_status }}" selected>{{ current_invoice_status }}</option>
+                                {% endif %}
+                                {% for status in invoice_status_options %}
+                                <option value="{{ status }}" {{ 'selected' if current_invoice_status == status }}>{{ status }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-primary inline-status-save">Speichern</button>
+                            <button type="button" class="btn btn-secondary inline-status-cancel" data-inline-status-cancel>Abbrechen</button>
+                        </form>
+                    </div>
                 </td>
                 <td class="col-reminder">
                     {% if inv.reminder_status %}
