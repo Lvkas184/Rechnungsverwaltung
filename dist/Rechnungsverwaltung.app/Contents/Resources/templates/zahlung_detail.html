@@ -130,14 +130,14 @@
                 {% if split_invoices %}
                     {% for split in split_invoices %}
                     <div style="margin-bottom: 8px;">
-                        <a href="{{ url_for('rechnung_detail', invoice_id=split.invoice_id) }}" class="btn btn-secondary" style="font-size: 14px; padding: 4px 8px;">
+                        <a href="{{ url_for('rechnung_detail', invoice_id=split.invoice_id, doc_type=(split.invoice_document_type or 'rechnung')) }}" class="btn btn-secondary" style="font-size: 14px; padding: 4px 8px;">
                             📄 Rechnung #{{ split.invoice_id }} ansehen
                         </a>
                         <span style="margin-left: 8px; font-weight: 600;">{{ split.amount_eur | format_eur }}</span>
                     </div>
                     {% endfor %}
                 {% elif pay.invoice_id %}
-                <a href="{{ url_for('rechnung_detail', invoice_id=pay.invoice_id) }}" class="btn btn-secondary" style="font-size: 14px; padding: 4px 8px;">
+                <a href="{{ url_for('rechnung_detail', invoice_id=pay.invoice_id, doc_type=inv_doc_type) }}" class="btn btn-secondary" style="font-size: 14px; padding: 4px 8px;">
                     📄 Rechnung #{{ pay.invoice_id }} ansehen
                 </a>
                 {% else %}
@@ -239,10 +239,10 @@
             </tr>
         </thead>
         <tbody>
-            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}')">
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=inv.invoice_id, doc_type=inv_doc_type) }}')">
                 <td class="cell-id">{{ inv.invoice_id }}</td>
                 <td>{{ inv.name or "—" }}</td>
-                <td class="cell-amount">{{ inv.amount_gross | format_eur }}</td>
+                <td class="cell-amount">{{ ((0 - (inv.amount_gross or 0)) if inv_doc_type == 'gutschrift' else inv.amount_gross) | format_eur }}</td>
                 <td>
                     {% set linked_invoice_status_style = status_inline_style(inv.status, 'invoice') %}
                     <span class="status-badge status-{{ inv.status | status_class if inv.status else 'offen' }}"{% if linked_invoice_status_style %} style="{{ linked_invoice_status_style }}"{% endif %}>
@@ -283,11 +283,11 @@
         </thead>
         <tbody>
             {% for split in split_invoices %}
-            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=split.invoice_id) }}')">
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=split.invoice_id, doc_type=(split.invoice_document_type or 'rechnung')) }}')">
                 <td class="cell-id">{{ split.invoice_id }}</td>
                 <td>{{ split.invoice_name or "—" }}</td>
                 <td class="cell-amount">{{ split.amount_eur | format_eur }}</td>
-                <td class="cell-amount">{{ split.invoice_amount_gross | format_eur }}</td>
+                <td class="cell-amount">{{ ((0 - (split.invoice_amount_gross or 0)) if split.invoice_document_type == 'gutschrift' else split.invoice_amount_gross) | format_eur }}</td>
                 <td>
                     {% set split_invoice_status_style = status_inline_style(split.invoice_status, 'invoice') %}
                     <span class="status-badge status-{{ split.invoice_status | status_class if split.invoice_status else 'offen' }}"{% if split_invoice_status_style %} style="{{ split_invoice_status_style }}"{% endif %}>

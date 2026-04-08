@@ -30,6 +30,34 @@ def test_bezahlt_within_tolerance():
     assert status == "Bezahlt"
 
 
+def test_gutschrift_status_when_credit_note_settles_invoice():
+    status, dev = compute_status_row(
+        {
+            "invoice_id": 260001,
+            "paid_sum_eur": 100.0,
+            "amount_gross": 100.0,
+            "credit_applied_eur": 100.0,
+        },
+        0.001,
+    )
+    assert status == "Gutschrift"
+    assert dev == 0.0
+
+
+def test_teiloffen_when_credit_note_only_partially_settles_invoice():
+    status, dev = compute_status_row(
+        {
+            "invoice_id": 260001,
+            "paid_sum_eur": 50.0,
+            "amount_gross": 100.0,
+            "credit_applied_eur": 50.0,
+        },
+        0.001,
+    )
+    assert status == "Teiloffen/Unterzahlung"
+    assert dev == -50.0
+
+
 def test_teiloffen():
     status, _ = compute_status_row({"paid_sum_eur": 50.0, "amount_gross": 100.0}, 0.001)
     assert status == "Teiloffen/Unterzahlung"

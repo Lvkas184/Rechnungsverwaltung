@@ -1,15 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Rechnungen — Rechnungsverwaltung{% endblock %}
+{% block title %}{{ "Gutschriften" if doc_type == 'gutschrift' else "Rechnungen" }} — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
 {% set current_list_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set is_credit_tab = doc_type == 'gutschrift' %}
 <div class="list-focus-page" data-list-focus-page>
 <div class="page-hero">
     <div>
-        <p class="page-kicker">Rechnungen</p>
-        <h1>Rechnungen <span class="count-badge">{{ total }}</span></h1>
+        <p class="page-kicker">{{ "Gutschriften" if is_credit_tab else "Rechnungen" }}</p>
+        <h1>{{ "Gutschriften" if is_credit_tab else "Rechnungen" }} <span class="count-badge">{{ total }}</span></h1>
         <p class="page-desc">
+            {% if is_credit_tab %}
+            Separater Bestand aller Gutschriften mit eigener Zuordnung auf Rechnungen.
+            {% else %}
             Durchsuchen, filtern und prüfen Sie den gesamten Rechnungsbestand inklusive Status, Mahnstufe, Mahnungsdatum und Bemerkungen.
+            {% endif %}
         </p>
     </div>
     <button type="button" class="table-focus-toggle" data-table-focus-toggle title="Nur Tabelle anzeigen" aria-pressed="false">
@@ -18,8 +23,28 @@
     </button>
 </div>
 
+<div class="doc-type-tabs" role="tablist" aria-label="Dokumenttyp">
+    <a
+        href="{{ url_for('rechnungen', doc_type='rechnung', status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}"
+        class="doc-type-tab {{ 'is-active' if not is_credit_tab }}"
+        role="tab"
+        aria-selected="{{ 'true' if not is_credit_tab else 'false' }}"
+    >
+        Rechnungen <span class="count-badge">{{ rechnung_count }}</span>
+    </a>
+    <a
+        href="{{ url_for('rechnungen', doc_type='gutschrift', status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}"
+        class="doc-type-tab {{ 'is-active' if is_credit_tab }}"
+        role="tab"
+        aria-selected="{{ 'true' if is_credit_tab else 'false' }}"
+    >
+        Gutschriften <span class="count-badge">{{ gutschrift_count }}</span>
+    </a>
+</div>
+
 <div class="filter-bar">
     <form method="GET" action="{{ url_for('rechnungen') }}" class="filter-form">
+        <input type="hidden" name="doc_type" value="{{ doc_type }}">
         <input type="text" name="q" placeholder="🔍 Suche (Nr., Name oder Bemerkung)…" value="{{ search }}" class="search-input">
         <select name="status" class="filter-select" onchange="this.form.submit()">
             <option value="">Alle Status</option>
@@ -43,14 +68,14 @@
 {% if invoices %}
 <div class="card table-focus-panel">
     <p class="page-kicker">Liste</p>
-    <h2>Rechnungsübersicht</h2>
+    <h2>{{ "Gutschriftenübersicht" if is_credit_tab else "Rechnungsübersicht" }}</h2>
     <div class="table-responsive sticky-table-shell">
     <table class="data-table rechnungen-table">
         <thead>
             {% macro sort_link(col_id, label) %}
                 {% set new_order = 'asc' if sort_col != col_id or order == 'desc' else 'desc' %}
                 {% set arrow = ' ↑' if sort_col == col_id and order == 'asc' else (' ↓' if sort_col == col_id and order == 'desc' else '') %}
-                <a href="{{ url_for('rechnungen', page=page, status=status_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                <a href="{{ url_for('rechnungen', page=page, doc_type=doc_type, status=status_filter, q=search, sort=col_id, order=new_order, per_page=per_page) }}" style="color: inherit; text-decoration: none; display: flex; align-items: center; justify-content: space-between; width: 100%;">
                     {{ label }}<span style="font-size: 0.8em; color: #888;">{{ arrow }}</span>
                 </a>
             {% endmacro %}
@@ -63,15 +88,19 @@
                 <th class="col-status">{{ sort_link('status', 'Status') }}</th>
                 <th class="col-reminder">{{ sort_link('reminder_status', 'Mahnung') }}</th>
                 <th class="col-reminder-date">{{ sort_link('reminder_date', 'Mahnungsdatum') }}</th>
+                {% if is_credit_tab %}
+                <th class="col-credit-assignment">Zuordnung</th>
+                {% endif %}
                 <th class="col-remark">{{ sort_link('remark', 'Bemerkung') }}</th>
             </tr>
         </thead>
         <tbody>
             {% for inv in invoices %}
-            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=inv.invoice_id) }}')">
+            {% set display_amount = (0 - (inv.amount_gross or 0)) if is_credit_tab else inv.amount_gross %}
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=inv.invoice_id, doc_type=doc_type) }}')">
                 <td class="cell-id col-invoice">{{ inv.invoice_id }}</td>
                 <td class="cell-name col-name">{{ inv.name or "—" }}</td>
-                <td class="cell-amount col-amount">{{ inv.amount_gross | format_eur }}</td>
+                <td class="cell-amount col-amount">{{ display_amount | format_eur }}</td>
                 <td class="cell-amount col-paid">{{ inv.paid_sum_eur | format_eur }}</td>
                 <td class="cell-amount col-deviation">{{ inv.deviation_eur | format_eur }}</td>
                 <td class="col-status inline-status-cell" data-inline-status-cell data-no-row-nav>
@@ -106,17 +135,87 @@
                         </form>
                     </div>
                 </td>
-                <td class="col-reminder">
-                    {% if inv.reminder_status %}
-                    <span class="mahnung-badge">{{ inv.reminder_status }}</span>
-                    {% else %}
-                    —
+                <td class="col-reminder inline-reminder-cell" data-inline-reminder-cell data-no-row-nav>
+                    {% set current_reminder_status = inv.reminder_status or "" %}
+                    <button
+                        type="button"
+                        class="mahnung-badge inline-reminder-trigger {{ 'inline-reminder-empty' if not current_reminder_status }}"
+                        data-inline-reminder-trigger
+                        aria-expanded="false"
+                        title="Mahnung und Datum anpassen"
+                    >
+                        {{ current_reminder_status if current_reminder_status else "Keine" }}
+                    </button>
+                    {% if inv.reminder_manual %}
+                    <span class="badge">manuell</span>
                     {% endif %}
+                    <div class="inline-reminder-editor" data-inline-reminder-editor hidden>
+                        <form method="POST" action="{{ url_for('rechnung_update_mahnung', invoice_id=inv.invoice_id) }}" class="inline-reminder-form" data-no-row-nav>
+                            <input type="hidden" name="next" value="{{ current_list_url }}">
+                            <select name="reminder_status" class="inline-reminder-select">
+                                <option value="" {{ 'selected' if not current_reminder_status }}>Keine Mahnung</option>
+                                <option value="1. Mahnung" {{ 'selected' if current_reminder_status == '1. Mahnung' }}>1. Mahnung</option>
+                                <option value="2. Mahnung" {{ 'selected' if current_reminder_status == '2. Mahnung' }}>2. Mahnung</option>
+                                <option value="3. Mahnung" {{ 'selected' if current_reminder_status == '3. Mahnung' }}>3. Mahnung</option>
+                            </select>
+                            <input
+                                type="date"
+                                name="reminder_date"
+                                class="inline-reminder-date"
+                                value="{{ inv.reminder_date or '' }}"
+                            >
+                            <button type="submit" class="btn btn-primary inline-reminder-save">Speichern</button>
+                            <button type="button" class="btn btn-secondary inline-reminder-cancel" data-inline-reminder-cancel>Abbrechen</button>
+                        </form>
+                    </div>
                 </td>
                 <td class="col-reminder-date">
                     {{ inv.reminder_date | format_date if inv.reminder_date else "—" }}
                 </td>
-                <td class="cell-note col-remark" title="{{ inv.remark or '' }}">{{ inv.remark[:160] if inv.remark else "—" }}{{ "…" if inv.remark and inv.remark|length > 160 }}</td>
+                {% if is_credit_tab %}
+                <td class="col-credit-assignment">
+                    {% if inv.credit_target_invoice_id %}
+                    <span class="credit-assignment-badge is-linked">✅ Zugeordnet</span>
+                    <a
+                        href="{{ url_for('rechnung_detail', invoice_id=inv.credit_target_invoice_id, doc_type='rechnung') }}"
+                        class="credit-assignment-link"
+                        data-no-row-nav
+                    >
+                        Rechnung #{{ inv.credit_target_invoice_id }}
+                    </a>
+                    {% else %}
+                    <span class="credit-assignment-badge is-unlinked">Nicht zugeordnet</span>
+                    {% endif %}
+                </td>
+                {% endif %}
+                <td class="col-remark inline-remark-cell" data-inline-remark-cell data-no-row-nav>
+                    {% set current_remark = inv.remark or "" %}
+                    <button
+                        type="button"
+                        class="inline-remark-trigger {{ 'inline-remark-empty' if not current_remark }}"
+                        data-inline-remark-trigger
+                        aria-expanded="false"
+                        title="Bemerkung ändern"
+                    >
+                        {{ current_remark[:120] if current_remark else "—" }}{{ "…" if current_remark and current_remark|length > 120 }}
+                    </button>
+                    <div class="inline-remark-editor" data-inline-remark-editor hidden>
+                        <form method="POST" action="{{ url_for('rechnung_update_bemerkung', invoice_id=inv.invoice_id) }}" class="inline-remark-form" data-no-row-nav>
+                            <input type="hidden" name="next" value="{{ current_list_url }}">
+                            <textarea
+                                name="remark"
+                                class="inline-remark-input"
+                                rows="3"
+                                maxlength="2000"
+                                placeholder="Bemerkung zur Rechnung…"
+                            >{{ current_remark }}</textarea>
+                            <div class="inline-remark-actions">
+                                <button type="submit" class="btn btn-primary inline-remark-save">Speichern</button>
+                                <button type="button" class="btn btn-secondary inline-remark-cancel" data-inline-remark-cancel>Abbrechen</button>
+                            </div>
+                        </form>
+                    </div>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -125,13 +224,14 @@
 
 {% if total_pages > 1 %}
 <div class="pagination" style="display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
-    <a href="{{ url_for('rechnungen', page=1, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Erste Seite">« Erste</a>
+    <a href="{{ url_for('rechnungen', page=1, doc_type=doc_type, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Erste Seite">« Erste</a>
     
     {% if page > 1 %}
-    <a href="{{ url_for('rechnungen', page=page-1, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary">← Zurück</a>
+    <a href="{{ url_for('rechnungen', page=page-1, doc_type=doc_type, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary">← Zurück</a>
     {% endif %}
 
     <form method="GET" action="{{ url_for('rechnungen') }}" style="display: inline-flex; align-items: center; gap: 5px; margin: 0 10px;">
+        <input type="hidden" name="doc_type" value="{{ doc_type }}">
         <input type="hidden" name="q" value="{{ search }}">
         <input type="hidden" name="status" value="{{ status_filter }}">
         <input type="hidden" name="sort" value="{{ sort_col }}">
@@ -144,17 +244,17 @@
     </form>
 
     {% if page < total_pages %}
-    <a href="{{ url_for('rechnungen', page=page+1, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary">Weiter →</a>
+    <a href="{{ url_for('rechnungen', page=page+1, doc_type=doc_type, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary">Weiter →</a>
     {% endif %}
 
-    <a href="{{ url_for('rechnungen', page=total_pages, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Letzte Seite">Letzte »</a>
+    <a href="{{ url_for('rechnungen', page=total_pages, doc_type=doc_type, status=status_filter, q=search, sort=sort_col, order=order, per_page=per_page) }}" class="btn btn-secondary" title="Letzte Seite">Letzte »</a>
 </div>
 {% endif %}
 </div>
 
 {% else %}
 <div class="empty-state">
-    <p>Keine Rechnungen gefunden.</p>
+    <p>{% if is_credit_tab %}Keine Gutschriften gefunden.{% else %}Keine Rechnungen gefunden.{% endif %}</p>
     <a href="{{ url_for('upload') }}" class="btn btn-primary">📤 Rechnungen importieren</a>
 </div>
 {% endif %}

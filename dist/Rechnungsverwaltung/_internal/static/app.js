@@ -360,6 +360,172 @@ function initInlineStatusEditors() {
     });
 }
 
+function initInlineReminderEditors() {
+    const cells = document.querySelectorAll("[data-inline-reminder-cell]");
+    if (!cells.length) return;
+
+    function setOpen(cell, open) {
+        const trigger = cell.querySelector("[data-inline-reminder-trigger]");
+        const editor = cell.querySelector("[data-inline-reminder-editor]");
+        if (!trigger || !editor) return;
+        const isOpen = Boolean(open);
+        editor.hidden = !isOpen;
+        cell.classList.toggle("inline-reminder-open", isOpen);
+        trigger.setAttribute("aria-expanded", String(isOpen));
+    }
+
+    function closeAll(exceptCell) {
+        cells.forEach(function (cell) {
+            if (exceptCell && cell === exceptCell) return;
+            setOpen(cell, false);
+        });
+    }
+
+    cells.forEach(function (cell) {
+        const trigger = cell.querySelector("[data-inline-reminder-trigger]");
+        const editor = cell.querySelector("[data-inline-reminder-editor]");
+        const form = cell.querySelector(".inline-reminder-form");
+        const cancel = cell.querySelector("[data-inline-reminder-cancel]");
+        if (!trigger || !editor) return;
+
+        trigger.addEventListener("click", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            const shouldOpen = editor.hidden;
+            closeAll(cell);
+            setOpen(cell, shouldOpen);
+        });
+
+        if (cancel) {
+            cancel.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                setOpen(cell, false);
+            });
+        }
+
+        if (form) {
+            const statusSelect = form.querySelector("select[name='reminder_status']");
+            const dateInput = form.querySelector("input[name='reminder_date']");
+
+            if (statusSelect && dateInput) {
+                const syncDateField = function () {
+                    const hasReminder = Boolean((statusSelect.value || "").trim());
+                    dateInput.disabled = !hasReminder;
+                    dateInput.classList.toggle("is-disabled", !hasReminder);
+                    if (!hasReminder) {
+                        dateInput.value = "";
+                    }
+                };
+                syncDateField();
+                statusSelect.addEventListener("change", syncDateField);
+            }
+
+            form.addEventListener("submit", function () {
+                const nextInput = form.querySelector("input[name='next']");
+                if (nextInput) {
+                    nextInput.value = buildNextUrlWithScroll(nextInput.value, form);
+                }
+            });
+        }
+
+        editor.addEventListener("click", function (event) {
+            event.stopPropagation();
+        });
+    });
+
+    document.addEventListener("click", function (event) {
+        if (event.target && event.target.closest("[data-inline-reminder-cell]")) {
+            return;
+        }
+        closeAll();
+    });
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+            closeAll();
+        }
+    });
+}
+
+function initInlineRemarkEditors() {
+    const cells = document.querySelectorAll("[data-inline-remark-cell]");
+    if (!cells.length) return;
+
+    function setOpen(cell, open) {
+        const trigger = cell.querySelector("[data-inline-remark-trigger]");
+        const editor = cell.querySelector("[data-inline-remark-editor]");
+        if (!trigger || !editor) return;
+        const isOpen = Boolean(open);
+        editor.hidden = !isOpen;
+        cell.classList.toggle("inline-remark-open", isOpen);
+        trigger.setAttribute("aria-expanded", String(isOpen));
+    }
+
+    function closeAll(exceptCell) {
+        cells.forEach(function (cell) {
+            if (exceptCell && cell === exceptCell) return;
+            setOpen(cell, false);
+        });
+    }
+
+    cells.forEach(function (cell) {
+        const trigger = cell.querySelector("[data-inline-remark-trigger]");
+        const editor = cell.querySelector("[data-inline-remark-editor]");
+        const form = cell.querySelector(".inline-remark-form");
+        const cancel = cell.querySelector("[data-inline-remark-cancel]");
+        const input = cell.querySelector(".inline-remark-input");
+        if (!trigger || !editor) return;
+
+        trigger.addEventListener("click", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            const shouldOpen = editor.hidden;
+            closeAll(cell);
+            setOpen(cell, shouldOpen);
+            if (shouldOpen && input) {
+                requestAnimationFrame(function () {
+                    input.focus();
+                });
+            }
+        });
+
+        if (cancel) {
+            cancel.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                setOpen(cell, false);
+            });
+        }
+
+        if (form) {
+            form.addEventListener("submit", function () {
+                const nextInput = form.querySelector("input[name='next']");
+                if (nextInput) {
+                    nextInput.value = buildNextUrlWithScroll(nextInput.value, form);
+                }
+            });
+        }
+
+        editor.addEventListener("click", function (event) {
+            event.stopPropagation();
+        });
+    });
+
+    document.addEventListener("click", function (event) {
+        if (event.target && event.target.closest("[data-inline-remark-cell]")) {
+            return;
+        }
+        closeAll();
+    });
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+            closeAll();
+        }
+    });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     restoreScrollFromQuery();
     applyZoomPercent(getStoredZoomPercent());
@@ -368,6 +534,8 @@ document.addEventListener("DOMContentLoaded", function () {
     initTableFocusMode();
     initInvoiceAmountEditor();
     initInlineStatusEditors();
+    initInlineReminderEditors();
+    initInlineRemarkEditors();
 
     // === Drag & Drop + File Select for Upload ===
     const forms = ["rechnungen", "sparkasse", "voba_kraichgau", "voba_pur"];

@@ -87,6 +87,18 @@ def _ensure_column(conn, table_name, column_name, column_sql):
 def _run_lightweight_migrations(conn):
     """Apply additive schema migrations for older local databases."""
     _ensure_column(conn, "invoices", "remark", "remark TEXT")
+    _ensure_column(
+        conn,
+        "invoices",
+        "document_type",
+        "document_type TEXT NOT NULL DEFAULT 'rechnung'",
+    )
+    _ensure_column(
+        conn,
+        "invoices",
+        "credit_target_invoice_id",
+        "credit_target_invoice_id INTEGER",
+    )
     _ensure_column(conn, "invoices", "status_manual", "status_manual INTEGER DEFAULT 0")
     _ensure_column(conn, "invoices", "reminder_status", "reminder_status TEXT")
     _ensure_column(conn, "invoices", "reminder_date", "reminder_date TEXT")
@@ -99,6 +111,12 @@ def _run_lightweight_migrations(conn):
     _ensure_column(conn, "payments", "status_override", "status_override TEXT")
     conn.executescript(
         """
+        CREATE INDEX IF NOT EXISTS idx_invoices_document_type
+          ON invoices(document_type);
+
+        CREATE INDEX IF NOT EXISTS idx_invoices_credit_target
+          ON invoices(credit_target_invoice_id);
+
         CREATE TABLE IF NOT EXISTS invoice_reminders (
           reminder_entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
           invoice_id INTEGER NOT NULL,
@@ -117,6 +135,7 @@ def _run_lightweight_migrations(conn):
           ON invoice_reminders(invoice_id);
         """
     )
+    _backfill_invoice_document_type(conn)
     _backfill_special_payment_flags(conn)
 
 
@@ -139,6 +158,29 @@ def _backfill_special_payment_flags(conn):
             conn.execute(
                 "UPDATE payments SET akonto = ?, schadensrechnung = ? WHERE payment_id = ?",
                 (akonto_flag, schadens_flag, row["payment_id"]),
+            )
+
+
+def _backfill_invoice_document_type(conn):
+    """Ensure invoices have a normalized document_type value."""
+    rows = conn.execute(
+        """
+        SELECT invoice_id,
+               COALESCE(TRIM(document_type), '') AS document_type,
+               COALESCE(TRIM(status), '') AS status
+        FROM invoices
+        """
+    ).fetchall()
+    for row in rows:
+        current_doc_type = str(row["document_type"] or "").strip().lower()
+        status_label = str(row["status"] or "").strip().lower()
+        target_doc_type = "gutschrift" if status_label == "gutschrift" else "rechnung"
+        if current_doc_type in ("rechnung", "gutschrift"):
+            target_doc_type = current_doc_type
+        if target_doc_type != current_doc_type:
+            conn.execute(
+                "UPDATE invoices SET document_type = ? WHERE invoice_id = ?",
+                (target_doc_type, row["invoice_id"]),
             )
 
 

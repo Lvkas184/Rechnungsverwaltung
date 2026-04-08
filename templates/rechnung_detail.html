@@ -1,13 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Rechnung {{ inv.invoice_id }} — Rechnungsverwaltung{% endblock %}
+{% block title %}{{ "Gutschrift" if inv_doc_type == 'gutschrift' else "Rechnung" }} {{ inv.invoice_id }} — Rechnungsverwaltung{% endblock %}
 
 {% block content %}
+{% set current_detail_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set is_credit_note = inv_doc_type == 'gutschrift' %}
+{% set amount_display = (0 - (inv.amount_gross or 0)) if is_credit_note else inv.amount_gross %}
 <div class="page-hero">
     <div>
         <p class="page-kicker">Rechnungsdetail</p>
         <div class="detail-header" style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
-            <a href="{{ url_for('rechnungen') }}" class="btn btn-secondary">← Zurück</a>
-            <h1 style="margin-bottom: 0;">Rechnung #{{ inv.invoice_id }}</h1>
+            <a href="{{ url_for('rechnungen', doc_type=list_doc_type) }}" class="btn btn-secondary">← Zurück</a>
+            <h1 style="margin-bottom: 0;">{{ "Gutschrift" if is_credit_note else "Rechnung" }} #{{ inv.invoice_id }}</h1>
         </div>
         <p class="page-desc">
             Stammdaten, Zahlungsstand, Mahnverlauf und manuelle Eingriffe für diese einzelne Rechnung.
@@ -28,7 +31,7 @@
             <span class="material-symbols-outlined">edit</span>
         </button>
         <span class="metric-card-label">Betrag brutto</span>
-        <div class="metric-card-value">{{ inv.amount_gross | format_eur }}</div>
+        <div class="metric-card-value">{{ amount_display | format_eur }}</div>
         <div class="metric-card-caption">{{ inv.name or "Kein Name hinterlegt" }}</div>
         <div class="metric-card-popover" data-amount-editor-popover hidden>
             <form
@@ -37,6 +40,7 @@
                 class="metric-card-popover-form"
                 data-amount-editor-form
             >
+                <input type="hidden" name="next" value="{{ current_detail_url }}">
                 <label for="invoice_manual_amount" class="metric-card-popover-label">Neuer Betrag (Brutto)</label>
                 <input
                     id="invoice_manual_amount"
@@ -83,7 +87,10 @@
             <dd>{{ inv.name or "—" }}</dd>
 
             <dt>Betrag (Brutto)</dt>
-            <dd class="cell-amount">{{ inv.amount_gross | format_eur }}</dd>
+            <dd class="cell-amount">{{ amount_display | format_eur }}</dd>
+
+            <dt>Dokumenttyp</dt>
+            <dd>{{ "Gutschrift" if is_credit_note else "Rechnung" }}</dd>
 
             <dt>Rechnungsdatum</dt>
             <dd>{{ inv.issue_date | format_date }}</dd>
@@ -161,11 +168,70 @@
 
 <div class="detail-action-grid">
     <div class="card">
+        <h2>Dokumenttyp</h2>
+        <p class="page-desc" style="margin-bottom: 14px;">
+            Dokument kann manuell zwischen Rechnung und Gutschrift umgestellt werden.
+        </p>
+        <div style="margin-bottom: 14px;">
+            <span class="status-badge status-{{ 'gutschrift' if is_credit_note else 'bezahlt' }}">
+                {{ "Gutschrift" if is_credit_note else "Rechnung" }}
+            </span>
+        </div>
+        <form method="POST" action="{{ url_for('rechnung_update_typ', invoice_id=inv.invoice_id) }}" class="inline-form">
+            <input type="hidden" name="next" value="{{ current_detail_url }}">
+            <input type="hidden" name="document_type" value="{{ 'rechnung' if is_credit_note else 'gutschrift' }}">
+            <button type="submit" class="btn btn-secondary">
+                {{ "Als Rechnung markieren" if is_credit_note else "Als Gutschrift markieren" }}
+            </button>
+        </form>
+    </div>
+
+    {% if is_credit_note %}
+    <div class="card">
+        <h2>Gutschrift-Zuordnung</h2>
+        <p class="page-desc" style="margin-bottom: 14px;">
+            Gutschrift wird auf genau eine Rechnung verrechnet und dort wie eine Zahlung berücksichtigt.
+        </p>
+        {% if credit_target_invoice %}
+        <p style="margin-bottom: 12px;">
+            Aktuell zugeordnet zu:
+            <a href="{{ url_for('rechnung_detail', invoice_id=credit_target_invoice.invoice_id, doc_type='rechnung') }}">
+                Rechnung #{{ credit_target_invoice.invoice_id }}
+            </a>
+        </p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('rechnung_update_gutschrift_zuordnung', invoice_id=inv.invoice_id) }}" class="inline-form" style="margin-bottom: 10px;">
+            <input type="hidden" name="next" value="{{ current_detail_url }}">
+            <div class="form-group">
+                <label for="credit_target_invoice_id">Ziel-Rechnungsnummer</label>
+                <input
+                    id="credit_target_invoice_id"
+                    type="number"
+                    name="target_invoice_id"
+                    class="form-input"
+                    placeholder="z.B. 260000"
+                    value="{{ credit_target_invoice.invoice_id if credit_target_invoice else '' }}"
+                >
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Zuordnung speichern</button>
+        </form>
+        {% if credit_target_invoice %}
+        <form method="POST" action="{{ url_for('rechnung_update_gutschrift_zuordnung', invoice_id=inv.invoice_id) }}">
+            <input type="hidden" name="next" value="{{ current_detail_url }}">
+            <input type="hidden" name="target_invoice_id" value="">
+            <button type="submit" class="btn btn-danger">🗑️ Zuordnung entfernen</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card">
         <h2>Status der Rechnung manuell setzen</h2>
         <p class="page-desc" style="margin-bottom: 14px;">
             Manuell gesetzte Rechnungs-Status bleiben bei "Matching starten" und "Status aktualisieren" erhalten.
         </p>
         <form method="POST" action="{{ url_for('rechnung_update_status', invoice_id=inv.invoice_id) }}" class="inline-form">
+            <input type="hidden" name="next" value="{{ current_detail_url }}">
             <div class="form-group">
                 <label for="invoice_manual_status">Status</label>
                 <select id="invoice_manual_status" name="status" class="form-input">
@@ -177,6 +243,7 @@
             <button type="submit" class="btn btn-primary">💾 Status speichern</button>
         </form>
         <form method="POST" action="{{ url_for('rechnung_reset_status_auto', invoice_id=inv.invoice_id) }}" style="margin-top: 12px;">
+            <input type="hidden" name="next" value="{{ current_detail_url }}">
             <button type="submit" class="btn btn-secondary">↺ Status-Automatik aktivieren</button>
         </form>
     </div>
@@ -184,6 +251,7 @@
     <div class="card">
         <h2>Bemerkung zur Rechnung</h2>
         <form method="POST" action="{{ url_for('rechnung_update_bemerkung', invoice_id=inv.invoice_id) }}">
+            <input type="hidden" name="next" value="{{ current_detail_url }}">
             <div class="form-group" style="min-width: 100%;">
                 <label for="invoice_remark">Bemerkung</label>
                 <textarea
@@ -204,6 +272,7 @@
             Jede Mahnstufe wird mit eigenem Datum gespeichert. In der Rechnungsübersicht zählt immer die zuletzt erreichte Mahnstufe.
         </p>
         <form method="POST" action="{{ url_for('rechnung_update_mahnung', invoice_id=inv.invoice_id) }}" class="inline-form">
+            <input type="hidden" name="next" value="{{ current_detail_url }}">
             <div class="form-group">
                 <label for="reminder_status">Mahnungsstatus</label>
                 <select id="reminder_status" name="reminder_status" class="form-input">
@@ -226,6 +295,7 @@
             <button type="submit" class="btn btn-primary">💾 Mahnung speichern</button>
         </form>
         <form method="POST" action="{{ url_for('rechnung_reset_mahnung_auto', invoice_id=inv.invoice_id) }}" style="margin-top: 12px;">
+            <input type="hidden" name="next" value="{{ current_detail_url }}">
             <button type="submit" class="btn btn-secondary">↺ Automatik wieder aktivieren</button>
         </form>
     </div>
@@ -268,9 +338,50 @@
     </table>
     </div>
 </div>
-{% else %}
+{% endif %}
+
+{% if linked_credit_notes %}
+<div class="card">
+    <p class="page-kicker">Verrechnete Gutschriften</p>
+    <h2>Zugeordnete Gutschriften ({{ linked_credit_notes | length }})</h2>
+    <p class="page-desc" style="margin-bottom: 16px;">Diese Gutschriften wirken auf den bezahlten Betrag wie Zahlungseingänge.</p>
+    <div class="table-responsive">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Gutschrift-Nr.</th>
+                <th>Name</th>
+                <th>Betrag</th>
+                <th>Datum</th>
+                <th>Status</th>
+                <th>Bemerkung</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for credit in linked_credit_notes %}
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('rechnung_detail', invoice_id=credit.invoice_id, doc_type='gutschrift') }}')">
+                <td class="cell-id">{{ credit.invoice_id }}</td>
+                <td>{{ credit.name or "—" }}</td>
+                <td class="cell-amount">{{ (0 - (credit.amount_gross or 0)) | format_eur }}</td>
+                <td>{{ credit.issue_date | format_date }}</td>
+                <td>
+                    {% set credit_status_style = status_inline_style(credit.status, 'invoice') %}
+                    <span class="status-badge status-{{ credit.status | status_class if credit.status else 'gutschrift' }}"{% if credit_status_style %} style="{{ credit_status_style }}"{% endif %}>
+                        {{ credit.status or "Gutschrift" }}
+                    </span>
+                </td>
+                <td class="cell-note" title="{{ credit.remark or '' }}">{{ credit.remark[:80] if credit.remark else "—" }}{{ "…" if credit.remark and credit.remark|length > 80 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% endif %}
+
+{% if not payments and not linked_credit_notes %}
 <div class="empty-state">
-    <p>Keine Zahlungen zugeordnet.</p>
+    <p>Keine Zahlungen oder Gutschriften zugeordnet.</p>
 </div>
 {% endif %}
 

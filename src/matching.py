@@ -229,26 +229,42 @@ def load_db():
     return get_db()
 
 
+def _has_column(conn, table_name, column_name):
+    cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+    return column_name in cols
+
+
 def find_invoice_by_id(conn, invoice_id):
     if not invoice_id:
         return None
-    return conn.execute(
+    row = conn.execute(
         "SELECT * FROM invoices WHERE invoice_id = ?", (invoice_id,)
     ).fetchone()
+    if not row:
+        return None
+    doc_type = "rechnung"
+    if "document_type" in row.keys():
+        doc_type = str(row["document_type"] or "rechnung").strip().lower()
+    if doc_type == "gutschrift":
+        return None
+    return row
 
 
 def find_candidates_by_amount(conn, amount, pct=0.05, limit=200):
     """Return open invoices whose amount_gross is within ±pct of *amount*."""
+    has_document_type = _has_column(conn, "invoices", "document_type")
+    type_clause = "AND COALESCE(document_type, 'rechnung') = 'rechnung'" if has_document_type else ""
     if amount is None:
         return conn.execute(
-            "SELECT * FROM invoices WHERE COALESCE(status, 'Offen') NOT IN ('Bezahlt', 'Bezahlt mit Mahngebühr') LIMIT ?",
+            f"SELECT * FROM invoices WHERE COALESCE(status, 'Offen') NOT IN ('Bezahlt', 'Bezahlt mit Mahngebühr', 'Gutschrift') {type_clause} LIMIT ?",
             (limit,),
         ).fetchall()
     low = amount * (1 - pct)
     high = amount * (1 + pct)
     return conn.execute(
-        """SELECT * FROM invoices
-           WHERE (COALESCE(status, 'Offen') NOT IN ('Bezahlt', 'Bezahlt mit Mahngebühr'))
+        f"""SELECT * FROM invoices
+           WHERE (COALESCE(status, 'Offen') NOT IN ('Bezahlt', 'Bezahlt mit Mahngebühr', 'Gutschrift'))
+             {type_clause}
              AND amount_gross BETWEEN ? AND ?
            LIMIT ?""",
         (low, high, limit),
@@ -276,7 +292,35 @@ def _remaining_invoice_amount(inv, payment=None):
     return max(0.0, float(inv["amount_gross"] or 0) - paid)
 
 
-def _compute_invoice_status(invoice_id, amount_gross, paid_sum, reminder_status=None):
+def _is_fully_settled_by_credit(amount_gross, deviation, credit_applied_eur):
+    try:
+        amount = float(amount_gross or 0.0)
+    except (TypeError, ValueError):
+        amount = 0.0
+    try:
+        credit_applied = float(credit_applied_eur or 0.0)
+    except (TypeError, ValueError):
+        credit_applied = 0.0
+
+    if credit_applied <= TOLERANCE:
+        return False
+    return (amount - credit_applied) <= TOLERANCE and abs(float(deviation or 0.0)) <= TOLERANCE
+
+
+def _compute_invoice_status(
+    invoice_id,
+    amount_gross,
+    paid_sum,
+    reminder_status=None,
+    credit_applied_eur=0.0,
+):
+    document_type = "rechnung"
+    if isinstance(reminder_status, dict):
+        document_type = str(reminder_status.get("document_type") or "rechnung").strip().lower()
+        reminder_status = reminder_status.get("reminder_status")
+    if document_type == "gutschrift":
+        return "Gutschrift", 0.0
+
     amount = float(amount_gross or 0)
     paid = float(paid_sum or 0)
     deviation = paid - amount
@@ -286,7 +330,11 @@ def _compute_invoice_status(invoice_id, amount_gross, paid_sum, reminder_status=
     elif paid == 0:
         status = "Offen"
     elif abs(deviation) <= TOLERANCE:
-        status = "Bezahlt"
+        status = (
+            "Gutschrift"
+            if _is_fully_settled_by_credit(amount, deviation, credit_applied_eur)
+            else "Bezahlt"
+        )
     elif deviation > TOLERANCE and _matches_mahngebuehr(reminder_status, deviation):
         status = "Bezahlt mit Mahngebühr"
     elif deviation > TOLERANCE:
@@ -298,44 +346,127 @@ def _compute_invoice_status(invoice_id, amount_gross, paid_sum, reminder_status=
 
 def _rebuild_invoice_aggregates_and_status(conn):
     """Rebuild invoice aggregates/statuses from matched payments."""
-    conn.execute(
-        """
-        UPDATE invoices
-        SET paid_sum_eur = (
-            SELECT COALESCE(SUM(amount_eur), 0)
-            FROM payments
-            WHERE payments.invoice_id = invoices.invoice_id
-              AND payments.matched = 1
-        ),
-            payment_count = (
-            SELECT COUNT(*)
-            FROM payments
-            WHERE payments.invoice_id = invoices.invoice_id
-              AND payments.matched = 1
-        ),
-            last_payment_date = (
-            SELECT MAX(COALESCE(value_date, booking_date, created_at))
-            FROM payments
-            WHERE payments.invoice_id = invoices.invoice_id
-              AND payments.matched = 1
+    has_document_type = _has_column(conn, "invoices", "document_type")
+    has_credit_target = _has_column(conn, "invoices", "credit_target_invoice_id")
+    if has_document_type and has_credit_target:
+        conn.execute(
+            """
+            UPDATE invoices
+            SET paid_sum_eur = CASE
+                WHEN COALESCE(invoices.document_type, 'rechnung') = 'rechnung' THEN (
+                    SELECT COALESCE(SUM(amount_eur), 0)
+                    FROM payments
+                    WHERE payments.invoice_id = invoices.invoice_id
+                      AND payments.matched = 1
+                ) + (
+                    SELECT COALESCE(SUM(amount_gross), 0)
+                    FROM invoices credits
+                    WHERE COALESCE(credits.document_type, 'rechnung') = 'gutschrift'
+                      AND credits.credit_target_invoice_id = invoices.invoice_id
+                )
+                ELSE 0
+            END,
+                payment_count = CASE
+                WHEN COALESCE(invoices.document_type, 'rechnung') = 'rechnung' THEN (
+                    SELECT COUNT(*)
+                    FROM payments
+                    WHERE payments.invoice_id = invoices.invoice_id
+                      AND payments.matched = 1
+                ) + (
+                    SELECT COUNT(*)
+                    FROM invoices credits
+                    WHERE COALESCE(credits.document_type, 'rechnung') = 'gutschrift'
+                      AND credits.credit_target_invoice_id = invoices.invoice_id
+                )
+                ELSE 0
+            END,
+                last_payment_date = CASE
+                WHEN COALESCE(invoices.document_type, 'rechnung') = 'rechnung' THEN (
+                    SELECT MAX(dt) FROM (
+                        SELECT COALESCE(value_date, booking_date, created_at) AS dt
+                        FROM payments
+                        WHERE payments.invoice_id = invoices.invoice_id
+                          AND payments.matched = 1
+                        UNION ALL
+                        SELECT COALESCE(issue_date, updated_at, created_at) AS dt
+                        FROM invoices credits
+                        WHERE COALESCE(credits.document_type, 'rechnung') = 'gutschrift'
+                          AND credits.credit_target_invoice_id = invoices.invoice_id
+                    )
+                )
+                ELSE NULL
+            END
+            """
         )
-        """
-    )
+    else:
+        conn.execute(
+            """
+            UPDATE invoices
+            SET paid_sum_eur = (
+                SELECT COALESCE(SUM(amount_eur), 0)
+                FROM payments
+                WHERE payments.invoice_id = invoices.invoice_id
+                  AND payments.matched = 1
+            ),
+                payment_count = (
+                SELECT COUNT(*)
+                FROM payments
+                WHERE payments.invoice_id = invoices.invoice_id
+                  AND payments.matched = 1
+            ),
+                last_payment_date = (
+                SELECT MAX(COALESCE(value_date, booking_date, created_at))
+                FROM payments
+                WHERE payments.invoice_id = invoices.invoice_id
+                  AND payments.matched = 1
+            )
+            """
+        )
 
-    rows = conn.execute(
-        """
-        SELECT invoice_id, amount_gross, paid_sum_eur,
-               reminder_status,
-               COALESCE(status_manual, 0) AS status_manual
-        FROM invoices
-        """
-    ).fetchall()
+    credit_applied_by_invoice = {}
+    if has_document_type and has_credit_target:
+        for row in conn.execute(
+            """
+            SELECT credit_target_invoice_id AS invoice_id,
+                   COALESCE(SUM(amount_gross), 0) AS credit_applied_eur
+            FROM invoices
+            WHERE COALESCE(document_type, 'rechnung') = 'gutschrift'
+              AND credit_target_invoice_id IS NOT NULL
+            GROUP BY credit_target_invoice_id
+            """
+        ).fetchall():
+            credit_applied_by_invoice[int(row["invoice_id"])] = float(row["credit_applied_eur"] or 0.0)
+
+    if has_document_type:
+        rows = conn.execute(
+            """
+            SELECT invoice_id, amount_gross, paid_sum_eur,
+                   COALESCE(document_type, 'rechnung') AS document_type,
+                   reminder_status,
+                   COALESCE(status_manual, 0) AS status_manual
+            FROM invoices
+            """
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT invoice_id, amount_gross, paid_sum_eur,
+                   'rechnung' AS document_type,
+                   reminder_status,
+                   COALESCE(status_manual, 0) AS status_manual
+            FROM invoices
+            """
+        ).fetchall()
     for inv in rows:
         status, deviation = _compute_invoice_status(
             inv["invoice_id"],
             inv["amount_gross"],
             inv["paid_sum_eur"],
-            inv["reminder_status"],
+            {
+                "document_type": inv["document_type"] if "document_type" in inv.keys() else "rechnung",
+                "reminder_status": inv["reminder_status"],
+            },
+            credit_applied_by_invoice.get(int(inv["invoice_id"]), 0.0),
         )
         if int(inv["status_manual"] or 0) == 1:
             conn.execute(

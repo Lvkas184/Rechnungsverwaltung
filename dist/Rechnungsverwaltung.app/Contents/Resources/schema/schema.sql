@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   invoice_id INTEGER PRIMARY KEY,
   name TEXT,
   remark TEXT,
+  document_type TEXT NOT NULL DEFAULT 'rechnung',
+  credit_target_invoice_id INTEGER NULL,
   amount_gross REAL,
   issue_date TEXT,
   due_date TEXT,
@@ -23,7 +25,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   reminder_date TEXT,
   reminder_manual INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(credit_target_invoice_id) REFERENCES invoices(invoice_id)
 );
 
 CREATE TABLE IF NOT EXISTS payments (

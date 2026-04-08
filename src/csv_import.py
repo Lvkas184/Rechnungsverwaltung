@@ -160,7 +160,7 @@ def import_datev_rechnungen(file_content, db_path=None, filename=None, created_b
     )
     imported = 0
     skipped = 0
-    touched_fields = ["name", "amount_gross", "issue_date"]
+    touched_fields = ["name", "amount_gross", "issue_date", "document_type"]
     if idx_due is not None:
         touched_fields.append("due_date")
 
@@ -192,14 +192,16 @@ def import_datev_rechnungen(file_content, db_path=None, filename=None, created_b
 
         amount = _parse_amount(val(idx_amount))
         sh_kz = val(idx_sh)
+        is_credit_note = bool(sh_kz and sh_kz.upper() == "H")
+        document_type = "gutschrift" if is_credit_note else "rechnung"
         # If H (Haben/Gutschrift), amount might be negative intent
-        if sh_kz and sh_kz.upper() == "H" and amount and amount > 0:
+        if is_credit_note and amount and amount > 0:
             amount = -amount
 
         name = val(idx_text)
         date = _parse_date(val(idx_date))
         due_date = _parse_date(val(idx_due))
-        default_status = classify_special_invoice_status(inv_nr) or "Offen"
+        default_status = "Gutschrift" if document_type == "gutschrift" else (classify_special_invoice_status(inv_nr) or "Offen")
         before_row = conn.execute(
             "SELECT * FROM invoices WHERE invoice_id = ?",
             (inv_nr,),
@@ -209,29 +211,53 @@ def import_datev_rechnungen(file_content, db_path=None, filename=None, created_b
             conn.execute(
                 """
                 INSERT INTO invoices(
-                    invoice_id, name, amount_gross, issue_date, due_date,
+                    invoice_id, name, document_type, amount_gross, issue_date, due_date,
                     status, paid_sum_eur, payment_count
-                ) VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
                 """,
-                (inv_nr, name, abs(amount) if amount else None, date, due_date, default_status),
+                (
+                    inv_nr,
+                    name,
+                    document_type,
+                    abs(amount) if amount else None,
+                    date,
+                    due_date,
+                    default_status,
+                ),
             )
         elif idx_due is not None:
             conn.execute(
                 """
                 UPDATE invoices
-                SET name = ?, amount_gross = ?, issue_date = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP
+                SET name = ?,
+                    document_type = ?,
+                    amount_gross = ?,
+                    issue_date = ?,
+                    due_date = ?,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = ?
                 """,
-                (name, abs(amount) if amount else None, date, due_date, inv_nr),
+                (
+                    name,
+                    document_type,
+                    abs(amount) if amount else None,
+                    date,
+                    due_date,
+                    inv_nr,
+                ),
             )
         else:
             conn.execute(
                 """
                 UPDATE invoices
-                SET name = ?, amount_gross = ?, issue_date = ?, updated_at = CURRENT_TIMESTAMP
+                SET name = ?,
+                    document_type = ?,
+                    amount_gross = ?,
+                    issue_date = ?,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = ?
                 """,
-                (name, abs(amount) if amount else None, date, inv_nr),
+                (name, document_type, abs(amount) if amount else None, date, inv_nr),
             )
 
         record_invoice_import(conn, import_batch_id, inv_nr, before_row, touched_fields)
@@ -520,7 +546,7 @@ def import_legacy_invoices_csv(file_content, db_path=None, filename=None, create
     )
     imported = 0
     skipped = 0
-    touched_fields = ["name", "amount_gross"]
+    touched_fields = ["name", "amount_gross", "document_type"]
 
     for row in data:
         if not row or all(c.strip() == "" for c in row):
@@ -548,11 +574,13 @@ def import_legacy_invoices_csv(file_content, db_path=None, filename=None, create
         amount = _parse_amount(val(idx_amount))
         art = val(idx_art)
         
-        if art and "gutschrift" in str(art).lower() and amount and amount > 0:
+        is_credit_note = bool(art and "gutschrift" in str(art).lower())
+        document_type = "gutschrift" if is_credit_note else "rechnung"
+        if is_credit_note and amount and amount > 0:
             amount = -amount
 
         name = val(idx_name)
-        default_status = classify_special_invoice_status(inv_nr) or "Offen"
+        default_status = "Gutschrift" if document_type == "gutschrift" else (classify_special_invoice_status(inv_nr) or "Offen")
         before_row = conn.execute(
             "SELECT * FROM invoices WHERE invoice_id = ?",
             (inv_nr,),
@@ -561,19 +589,24 @@ def import_legacy_invoices_csv(file_content, db_path=None, filename=None, create
         if before_row is None:
             conn.execute(
                 """
-                INSERT INTO invoices(invoice_id, name, amount_gross, status, paid_sum_eur, payment_count)
-                VALUES (?, ?, ?, ?, 0, 0)
+                INSERT INTO invoices(
+                    invoice_id, name, document_type, amount_gross, status, paid_sum_eur, payment_count
+                )
+                VALUES (?, ?, ?, ?, ?, 0, 0)
                 """,
-                (inv_nr, name, abs(amount) if amount else None, default_status),
+                (inv_nr, name, document_type, abs(amount) if amount else None, default_status),
             )
         else:
             conn.execute(
                 """
                 UPDATE invoices
-                SET name = ?, amount_gross = ?, updated_at = CURRENT_TIMESTAMP
+                SET name = ?,
+                    document_type = ?,
+                    amount_gross = ?,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = ?
                 """,
-                (name, abs(amount) if amount else None, inv_nr),
+                (name, document_type, abs(amount) if amount else None, inv_nr),
             )
 
         record_invoice_import(conn, import_batch_id, inv_nr, before_row, touched_fields)

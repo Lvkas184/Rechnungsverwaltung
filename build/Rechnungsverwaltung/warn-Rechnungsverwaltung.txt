@@ -16,7 +16,7 @@ IMPORTANT: Do NOT post this list to the issue-tracker. Use it as a basis for
 
 missing module named 'org.python' - imported by copy (optional), xml.sax (delayed, conditional)
 missing module named 'typing.io' - imported by importlib.resources (top-level)
-missing module named nt - imported by os (delayed, conditional, optional), ntpath (optional), shutil (conditional), importlib._bootstrap_external (conditional), pathlib (conditional), ctypes (delayed, conditional)
+missing module named nt - imported by shutil (conditional), importlib._bootstrap_external (conditional), ntpath (optional), pathlib (conditional), os (delayed, conditional, optional), ctypes (delayed, conditional)
 missing module named urllib.unquote - imported by urllib (conditional), bottle (conditional)
 missing module named urllib.quote - imported by urllib (conditional), bottle (conditional)
 missing module named urllib.urlencode - imported by urllib (conditional), bottle (conditional)

@@ -31,6 +31,9 @@ def run_mahnung():
     rows = conn.execute("SELECT * FROM invoices").fetchall()
 
     for inv in rows:
+        if str(inv["document_type"] if "document_type" in inv.keys() else "rechnung").strip().lower() == "gutschrift":
+            continue
+
         issue_date = inv["issue_date"]
         if not issue_date:
             continue
@@ -39,7 +42,7 @@ def run_mahnung():
         except (ValueError, TypeError):
             continue
 
-        if inv["status"] in ("Bezahlt", "Bezahlt mit Mahngebühr"):
+        if inv["status"] in ("Bezahlt", "Bezahlt mit Mahngebühr", "Gutschrift"):
             continue
 
         if int(inv["reminder_manual"] or 0) == 1:

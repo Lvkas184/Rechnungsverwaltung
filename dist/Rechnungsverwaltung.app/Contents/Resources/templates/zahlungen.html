@@ -94,7 +94,7 @@
                 <td class="cell-ref col-ref">{{ p.reference_text[:80] if p.reference_text else "—" }}{{ "…" if p.reference_text and p.reference_text|length > 80 }}</td>
                 <td class="col-invoice">
                     {% if p.invoice_id %}
-                    <a href="{{ url_for('rechnung_detail', invoice_id=p.invoice_id) }}">{{ p.invoice_id }}</a>
+                    <a href="{{ url_for('rechnung_detail', invoice_id=p.invoice_id, doc_type=(p.invoice_document_type or 'rechnung')) }}">{{ p.invoice_id }}</a>
                     {% elif p.match_rule and p.match_rule.startswith('split_') %}
                     Mehrfach
                     {% else %}
@@ -132,7 +132,34 @@
                         </form>
                     </div>
                 </td>
-                <td class="cell-note col-remark" title="{{ p.remark or '' }}">{{ p.remark[:160] if p.remark else "—" }}{{ "…" if p.remark and p.remark|length > 160 }}</td>
+                <td class="col-remark inline-remark-cell" data-inline-remark-cell data-no-row-nav>
+                    {% set current_remark = p.remark or "" %}
+                    <button
+                        type="button"
+                        class="inline-remark-trigger {{ 'inline-remark-empty' if not current_remark }}"
+                        data-inline-remark-trigger
+                        aria-expanded="false"
+                        title="Bemerkung ändern"
+                    >
+                        {{ current_remark[:120] if current_remark else "—" }}{{ "…" if current_remark and current_remark|length > 120 }}
+                    </button>
+                    <div class="inline-remark-editor" data-inline-remark-editor hidden>
+                        <form method="POST" action="{{ url_for('zahlung_update_bemerkung', payment_id=p.payment_id) }}" class="inline-remark-form" data-no-row-nav>
+                            <input type="hidden" name="next" value="{{ current_list_url }}">
+                            <textarea
+                                name="remark"
+                                class="inline-remark-input"
+                                rows="3"
+                                maxlength="2000"
+                                placeholder="Bemerkung zur Zahlung…"
+                            >{{ current_remark }}</textarea>
+                            <div class="inline-remark-actions">
+                                <button type="submit" class="btn btn-primary inline-remark-save">Speichern</button>
+                                <button type="button" class="btn btn-secondary inline-remark-cancel" data-inline-remark-cancel>Abbrechen</button>
+                            </div>
+                        </form>
+                    </div>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
