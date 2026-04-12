@@ -21,36 +21,35 @@
 <div class="filter-bar">
     <form method="GET" action="{{ url_for('zahlungen') }}" class="filter-form">
         <input type="text" name="q" placeholder="🔍 Suche (Name, VWZ, ReNr, Bemerkung)…" value="{{ search }}" class="search-input">
+        <button type="submit" class="btn btn-secondary filter-search-btn">Suchen</button>
         
-        <select name="show" class="filter-select" onchange="this.form.submit()">
+        <select name="show" class="filter-select filter-select--show-type" onchange="this.form.submit()">
             <option value="income" {{ 'selected' if show_type == 'income' }}>💰 Nur Einnahmen (> 0€)</option>
             <option value="akonto" {{ 'selected' if show_type == 'akonto' }}>🧾 Abschlagsrechnungen (Akonto)</option>
             <option value="schadens" {{ 'selected' if show_type == 'schadens' }}>🛠️ Schadensrechnungen</option>
             <option value="all" {{ 'selected' if show_type == 'all' }}>📂 Alle Zahlungen</option>
         </select>
 
-        <select name="filter" class="filter-select" onchange="this.form.submit()">
+        <select name="filter" class="filter-select filter-select--status" onchange="this.form.submit()">
             <option value="">Alle Status</option>
             <option value="matched" {{ 'selected' if filter_type == 'matched' }}>✅ Zugeordnet</option>
             <option value="unmatched" {{ 'selected' if filter_type == 'unmatched' }}>❌ Nicht zugeordnet</option>
         </select>
 
-        <select name="bank" class="filter-select" onchange="this.form.submit()">
+        <select name="bank" class="filter-select filter-select--bank" onchange="this.form.submit()">
             <option value="">Alle Banken</option>
             {% for bank in bank_options %}
             <option value="{{ bank }}" {{ 'selected' if bank_filter == bank }}>{{ bank }}</option>
             {% endfor %}
         </select>
 
-        <select name="per_page" class="filter-select" onchange="this.form.submit()">
+        <select name="per_page" class="filter-select filter-select--per-page" onchange="this.form.submit()">
             <option value="20" {{ 'selected' if per_page == 20 }}>20 pro Seite</option>
             <option value="50" {{ 'selected' if per_page == 50 }}>50 pro Seite</option>
             <option value="100" {{ 'selected' if per_page == 100 }}>100 pro Seite</option>
             <option value="200" {{ 'selected' if per_page == 200 }}>200 pro Seite</option>
             <option value="500" {{ 'selected' if per_page == 500 }}>500 pro Seite</option>
         </select>
-
-        <button type="submit" class="btn btn-secondary">Suchen</button>
     </form>
 </div>
 

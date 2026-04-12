@@ -56,7 +56,7 @@
  [],
  False,
  False,
- 1775654740,
+ 1775995589,
  [('runw',
    '/Users/lukas184/Rechnungsverwaltung/Rechnungsverwaltung-1/Rechnungsverwaltung/.venv-build/lib/python3.9/site-packages/PyInstaller/bootloader/Darwin-64bit/runw',
    'EXECUTABLE')],

@@ -46,22 +46,21 @@
     <form method="GET" action="{{ url_for('rechnungen') }}" class="filter-form">
         <input type="hidden" name="doc_type" value="{{ doc_type }}">
         <input type="text" name="q" placeholder="🔍 Suche (Nr., Name oder Bemerkung)…" value="{{ search }}" class="search-input">
-        <select name="status" class="filter-select" onchange="this.form.submit()">
+        <button type="submit" class="btn btn-secondary filter-search-btn">Suchen</button>
+        <select name="status" class="filter-select filter-select--status" onchange="this.form.submit()">
             <option value="">Alle Status</option>
             {% for status in invoice_status_filter_options %}
             <option value="{{ status }}" {{ 'selected' if status_filter == status }}>{{ status }}</option>
             {% endfor %}
         </select>
 
-        <select name="per_page" class="filter-select" onchange="this.form.submit()">
+        <select name="per_page" class="filter-select filter-select--per-page" onchange="this.form.submit()">
             <option value="20" {{ 'selected' if per_page == 20 }}>20 pro Seite</option>
             <option value="50" {{ 'selected' if per_page == 50 }}>50 pro Seite</option>
             <option value="100" {{ 'selected' if per_page == 100 }}>100 pro Seite</option>
             <option value="200" {{ 'selected' if per_page == 200 }}>200 pro Seite</option>
             <option value="500" {{ 'selected' if per_page == 500 }}>500 pro Seite</option>
         </select>
-        
-        <button type="submit" class="btn btn-secondary">Suchen</button>
     </form>
 </div>
 

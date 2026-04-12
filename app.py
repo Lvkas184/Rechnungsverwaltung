@@ -220,6 +220,29 @@ def _normalize_ascii_key(value):
     return s
 
 
+def _normalize_hex_color(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", raw):
+        return raw.lower()
+    if re.fullmatch(r"#[0-9a-fA-F]{3}", raw):
+        r, g, b = raw[1], raw[2], raw[3]
+        return f"#{r}{r}{g}{g}{b}{b}".lower()
+    return ""
+
+
+def _hex_to_rgb(hex_color):
+    normalized = _normalize_hex_color(hex_color)
+    if not normalized:
+        return None
+    return (
+        int(normalized[1:3], 16),
+        int(normalized[3:5], 16),
+        int(normalized[5:7], 16),
+    )
+
+
 def _parse_custom_statuses_input(raw_value):
     if raw_value is None:
         return []
@@ -297,6 +320,11 @@ def _parse_custom_status_colors_input(raw_value, allowed_statuses, strict=True):
                 )
             continue
 
+        hex_color = _normalize_hex_color(color_name)
+        if hex_color:
+            result[canonical_status] = hex_color
+            continue
+
         normalized_color = _normalize_ascii_key(color_name)
         normalized_color = re.sub(r"[\s_-]+", "", normalized_color)
         canonical_color = STATUS_COLOR_ALIASES.get(normalized_color)
@@ -304,7 +332,7 @@ def _parse_custom_status_colors_input(raw_value, allowed_statuses, strict=True):
             if strict:
                 allowed_colors = ", ".join(sorted(STATUS_COLOR_PRESETS.keys()))
                 raise ValueError(
-                    f"Farbe '{color_name}' ist ungültig. Erlaubt: {allowed_colors}."
+                    f"Farbe '{color_name}' ist ungültig. Erlaubt: {allowed_colors} oder z.B. #1d4ed8."
                 )
             continue
 
@@ -360,12 +388,21 @@ def _status_badge_inline_style(status, kind, status_cfg):
     if not color_key:
         return ""
     palette = STATUS_COLOR_PRESETS.get(str(color_key))
-    if not palette:
+    if palette:
+        return (
+            f"background: {palette['bg']}; "
+            f"color: {palette['text']}; "
+            f"border-color: {palette['border']};"
+        )
+
+    rgb = _hex_to_rgb(color_key)
+    if not rgb:
         return ""
+    r, g, b = rgb
     return (
-        f"background: {palette['bg']}; "
-        f"color: {palette['text']}; "
-        f"border-color: {palette['border']};"
+        f"background: rgba({r}, {g}, {b}, 0.18); "
+        f"color: rgb({r}, {g}, {b}); "
+        f"border-color: rgba({r}, {g}, {b}, 0.36);"
     )
 
 
@@ -672,12 +709,14 @@ def dashboard():
 def einstellungen():
     params = _load_app_params()
     status_cfg = _status_options_from_params(params)
-    custom_invoice_statuses_text = "\n".join(
-        [s for s in status_cfg["invoice_statuses"] if s not in MANUAL_INVOICE_STATUSES]
-    )
-    custom_payment_statuses_text = "\n".join(
-        [s for s in status_cfg["payment_statuses"] if s not in MANUAL_PAYMENT_STATUSES]
-    )
+    custom_invoice_statuses_list = [
+        s for s in status_cfg["invoice_statuses"] if s not in MANUAL_INVOICE_STATUSES
+    ]
+    custom_payment_statuses_list = [
+        s for s in status_cfg["payment_statuses"] if s not in MANUAL_PAYMENT_STATUSES
+    ]
+    custom_invoice_statuses_text = "\n".join(custom_invoice_statuses_list)
+    custom_payment_statuses_text = "\n".join(custom_payment_statuses_list)
     custom_invoice_status_colors_text = _status_color_map_to_text(
         status_cfg["invoice_statuses"], status_cfg.get("invoice_status_colors", {})
     )
@@ -744,6 +783,9 @@ def einstellungen():
     return render_template(
         "einstellungen.html",
         params=params,
+        status_cfg=status_cfg,
+        custom_invoice_statuses_list=custom_invoice_statuses_list,
+        custom_payment_statuses_list=custom_payment_statuses_list,
         custom_invoice_statuses_text=custom_invoice_statuses_text,
         custom_payment_statuses_text=custom_payment_statuses_text,
         custom_invoice_status_colors_text=custom_invoice_status_colors_text,
@@ -1932,7 +1974,11 @@ def zahlung_manual_clear(payment_id):
 
 @app.route("/upload")
 def upload():
-    import_batches = fetch_import_batches(limit=30)
+    try:
+        import_batches = fetch_import_batches(limit=30)
+    except Exception as exc:
+        import_batches = []
+        flash(f"Import-Historie konnte nicht geladen werden: {exc}", "error")
     return render_template("upload.html", import_batches=import_batches)
 
 

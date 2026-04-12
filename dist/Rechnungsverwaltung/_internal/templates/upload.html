@@ -152,7 +152,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for item in batch.items %}
+                        {% for item in batch["items"] %}
                         <tr>
                             <td>{{ "Rechnung" if item.entity_type == "invoice" else "Zahlung" }}</td>
                             <td>{{ item.entity_id }}</td>

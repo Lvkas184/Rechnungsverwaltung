@@ -526,6 +526,301 @@ function initInlineRemarkEditors() {
     });
 }
 
+function normalizeHexColor(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) {
+        return raw.toLowerCase();
+    }
+    if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+        const r = raw[1];
+        const g = raw[2];
+        const b = raw[3];
+        return ("#" + r + r + g + g + b + b).toLowerCase();
+    }
+    return "";
+}
+
+function hexToRgb(hex) {
+    const normalized = normalizeHexColor(hex);
+    if (!normalized) return null;
+    return {
+        r: Number.parseInt(normalized.slice(1, 3), 16),
+        g: Number.parseInt(normalized.slice(3, 5), 16),
+        b: Number.parseInt(normalized.slice(5, 7), 16),
+    };
+}
+
+function statusStyleFromHex(hex) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return "";
+    return "background: rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", 0.18);"
+        + "color: rgb(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ");"
+        + "border-color: rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", 0.36);";
+}
+
+function initSettingsStatusManager() {
+    const root = document.querySelector("[data-status-manager]");
+    if (!root) return;
+
+    const presetToHex = {
+        grau: "#6b7280",
+        gruen: "#16a34a",
+        rot: "#dc2626",
+        orange: "#ea580c",
+        blau: "#2563eb",
+        lila: "#7c3aed",
+        gelb: "#ca8a04",
+        tuerkis: "#0d9488",
+    };
+
+    function resolveColorToHex(value) {
+        const hex = normalizeHexColor(value);
+        if (hex) return hex;
+        const key = String(value || "").trim().toLowerCase();
+        return presetToHex[key] || "";
+    }
+
+    const dataEl = document.getElementById("settings-status-data");
+    let initial = {};
+    if (dataEl) {
+        try {
+            initial = JSON.parse(dataEl.textContent || "{}");
+        } catch (_error) {
+            initial = {};
+        }
+    }
+
+    const invoiceColors = initial && typeof initial.invoiceColors === "object" && initial.invoiceColors
+        ? initial.invoiceColors
+        : {};
+    const paymentColors = initial && typeof initial.paymentColors === "object" && initial.paymentColors
+        ? initial.paymentColors
+        : {};
+
+    function buildItems(statuses, colorMap) {
+        const result = [];
+        (Array.isArray(statuses) ? statuses : []).forEach(function (statusName) {
+            const name = String(statusName || "").trim();
+            if (!name) return;
+            result.push({
+                name: name,
+                color: resolveColorToHex(colorMap[name]),
+            });
+        });
+        return result;
+    }
+
+    const state = {
+        invoice: buildItems(initial.invoiceStatuses, invoiceColors),
+        payment: buildItems(initial.paymentStatuses, paymentColors),
+    };
+
+    const customInvoiceKeys = new Set(state.invoice.map(function (item) { return item.name.toLowerCase(); }));
+    const customPaymentKeys = new Set(state.payment.map(function (item) { return item.name.toLowerCase(); }));
+
+    const preservedInvoiceColors = {};
+    Object.keys(invoiceColors || {}).forEach(function (statusName) {
+        if (!customInvoiceKeys.has(String(statusName || "").toLowerCase())) {
+            preservedInvoiceColors[statusName] = invoiceColors[statusName];
+        }
+    });
+
+    const preservedPaymentColors = {};
+    Object.keys(paymentColors || {}).forEach(function (statusName) {
+        if (!customPaymentKeys.has(String(statusName || "").toLowerCase())) {
+            preservedPaymentColors[statusName] = paymentColors[statusName];
+        }
+    });
+
+    const hiddenInvoiceStatuses = document.querySelector("[data-hidden-target='invoice-statuses']");
+    const hiddenPaymentStatuses = document.querySelector("[data-hidden-target='payment-statuses']");
+    const hiddenInvoiceColors = document.querySelector("[data-hidden-target='invoice-colors']");
+    const hiddenPaymentColors = document.querySelector("[data-hidden-target='payment-colors']");
+
+    const invoiceList = root.querySelector("[data-custom-status-list='invoice']");
+    const paymentList = root.querySelector("[data-custom-status-list='payment']");
+
+    const overlay = document.querySelector("[data-status-overlay]");
+    const openBtn = root.querySelector("[data-status-overlay-open]");
+    const closeBtns = overlay ? overlay.querySelectorAll("[data-status-overlay-close]") : [];
+    const targetInputs = overlay ? overlay.querySelectorAll("[data-status-target]") : [];
+    const nameInput = overlay ? overlay.querySelector("[data-status-name-input]") : null;
+    const colorInput = overlay ? overlay.querySelector("[data-status-color-input]") : null;
+    const colorValue = overlay ? overlay.querySelector("[data-status-color-value]") : null;
+    const addBtn = overlay ? overlay.querySelector("[data-status-add-confirm]") : null;
+
+    function toHiddenLines(items) {
+        return items.map(function (item) { return item.name; }).join("\n");
+    }
+
+    function toColorLines(kind, items) {
+        const preserved = kind === "invoice" ? preservedInvoiceColors : preservedPaymentColors;
+        const lines = Object.keys(preserved).map(function (statusName) {
+            return String(statusName || "").trim() + "=" + String(preserved[statusName] || "").trim();
+        }).filter(function (line) {
+            return line.length > 1 && line.indexOf("=") > 0;
+        });
+
+        return lines.concat(items
+            .filter(function (item) { return normalizeHexColor(item.color); })
+            .map(function (item) { return item.name + "=" + normalizeHexColor(item.color); }))
+            .join("\n");
+    }
+
+    function syncHiddenFields() {
+        if (hiddenInvoiceStatuses) hiddenInvoiceStatuses.value = toHiddenLines(state.invoice);
+        if (hiddenPaymentStatuses) hiddenPaymentStatuses.value = toHiddenLines(state.payment);
+        if (hiddenInvoiceColors) hiddenInvoiceColors.value = toColorLines("invoice", state.invoice);
+        if (hiddenPaymentColors) hiddenPaymentColors.value = toColorLines("payment", state.payment);
+    }
+
+    function updateColorValueLabel() {
+        if (!colorInput || !colorValue) return;
+        colorValue.textContent = normalizeHexColor(colorInput.value) || "#2563eb";
+    }
+
+    function renderList(kind, container) {
+        if (!container) return;
+        container.innerHTML = "";
+        const items = kind === "invoice" ? state.invoice : state.payment;
+        if (!items.length) {
+            const empty = document.createElement("p");
+            empty.className = "settings-custom-status-empty";
+            empty.textContent = "Noch keine zusätzlichen Status.";
+            container.appendChild(empty);
+            return;
+        }
+
+        items.forEach(function (item, index) {
+            const row = document.createElement("div");
+            row.className = "settings-custom-status-item";
+
+            const badge = document.createElement("span");
+            badge.className = "status-badge";
+            badge.textContent = item.name;
+            const style = statusStyleFromHex(item.color);
+            if (style) badge.setAttribute("style", style);
+            row.appendChild(badge);
+
+            const picker = document.createElement("input");
+            picker.type = "color";
+            picker.className = "settings-custom-status-color";
+            picker.value = normalizeHexColor(item.color) || "#2563eb";
+            picker.title = "Farbe ändern";
+            picker.addEventListener("input", function () {
+                item.color = normalizeHexColor(picker.value);
+                const nextStyle = statusStyleFromHex(item.color);
+                if (nextStyle) {
+                    badge.setAttribute("style", nextStyle);
+                } else {
+                    badge.removeAttribute("style");
+                }
+                syncHiddenFields();
+            });
+            row.appendChild(picker);
+
+            const removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.className = "settings-custom-status-remove";
+            removeBtn.textContent = "✕";
+            removeBtn.title = "Status entfernen";
+            removeBtn.addEventListener("click", function () {
+                items.splice(index, 1);
+                renderAll();
+            });
+            row.appendChild(removeBtn);
+
+            container.appendChild(row);
+        });
+    }
+
+    function renderAll() {
+        renderList("invoice", invoiceList);
+        renderList("payment", paymentList);
+        syncHiddenFields();
+    }
+
+    function setOverlayOpen(open) {
+        if (!overlay) return;
+        const isOpen = Boolean(open);
+        overlay.hidden = !isOpen;
+        if (isOpen && nameInput) {
+            requestAnimationFrame(function () {
+                nameInput.focus();
+                nameInput.select();
+            });
+        }
+    }
+
+    if (openBtn && overlay) {
+        openBtn.addEventListener("click", function () {
+            setOverlayOpen(true);
+        });
+    }
+
+    closeBtns.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            setOverlayOpen(false);
+        });
+    });
+
+    if (overlay) {
+        overlay.addEventListener("click", function (event) {
+            if (event.target && event.target.matches("[data-status-overlay-backdrop]")) {
+                setOverlayOpen(false);
+            }
+        });
+    }
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && overlay && !overlay.hidden) {
+            setOverlayOpen(false);
+        }
+    });
+
+    if (colorInput) {
+        colorInput.addEventListener("input", updateColorValueLabel);
+        updateColorValueLabel();
+    }
+
+    if (addBtn && nameInput) {
+        addBtn.addEventListener("click", function () {
+            const name = String(nameInput.value || "").trim();
+            const color = normalizeHexColor(colorInput ? colorInput.value : "");
+            if (!name) {
+                alert("Bitte einen Statusnamen eingeben.");
+                return;
+            }
+            if (name.length > 60) {
+                alert("Statusname darf maximal 60 Zeichen haben.");
+                return;
+            }
+
+            let target = "invoice";
+            targetInputs.forEach(function (input) {
+                if (input.checked) target = input.value;
+            });
+
+            const list = target === "payment" ? state.payment : state.invoice;
+            const existing = list.find(function (item) {
+                return item.name.toLowerCase() === name.toLowerCase();
+            });
+            if (existing) {
+                existing.color = color || existing.color;
+            } else {
+                list.push({ name: name, color: color });
+            }
+
+            nameInput.value = "";
+            renderAll();
+            setOverlayOpen(false);
+        });
+    }
+
+    renderAll();
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     restoreScrollFromQuery();
     applyZoomPercent(getStoredZoomPercent());
@@ -536,6 +831,7 @@ document.addEventListener("DOMContentLoaded", function () {
     initInlineStatusEditors();
     initInlineReminderEditors();
     initInlineRemarkEditors();
+    initSettingsStatusManager();
 
     // === Drag & Drop + File Select for Upload ===
     const forms = ["rechnungen", "sparkasse", "voba_kraichgau", "voba_pur"];

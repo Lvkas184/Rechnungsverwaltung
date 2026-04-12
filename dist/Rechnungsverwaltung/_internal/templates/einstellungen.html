@@ -67,61 +67,101 @@
             </small>
         </div>
 
-        <div class="form-group" style="min-width: 100%;">
-            <label for="custom_invoice_statuses">Zusätzliche Rechnungs-Status (optional)</label>
-            <textarea
-                id="custom_invoice_statuses"
-                name="custom_invoice_statuses"
-                class="form-input"
-                rows="4"
-                placeholder="Ein Status pro Zeile, z.B.&#10;Widerspruch&#10;Freigabe intern"
-            >{{ custom_invoice_statuses_text or '' }}</textarea>
-            <small class="text-muted">
-                Diese Status erscheinen in Rechnungs-Filter und in der manuellen Status-Auswahl bei Rechnungen.
-            </small>
+        <div class="form-group settings-status-manager" style="min-width: 100%;" data-status-manager>
+            <div class="settings-status-manager-head">
+                <div>
+                    <label>Status-Konfiguration</label>
+                    <small class="text-muted">Status für Rechnungen und Zahlungen in einem Overlay verwalten, inklusive freier Farbe.</small>
+                </div>
+                <button type="button" class="btn btn-secondary settings-add-status-btn" data-status-overlay-open>
+                    <span class="material-symbols-outlined">add_circle</span>
+                    Status hinzufügen
+                </button>
+            </div>
+
+            <div class="settings-status-overview">
+                <div class="settings-status-overview-section">
+                    <h3>Aktuelle Rechnungs-Status</h3>
+                    <div class="settings-status-badge-list">
+                        {% for status in status_cfg.invoice_statuses %}
+                        {% set st = status_inline_style(status, 'invoice') %}
+                        <span class="status-badge status-{{ status|status_class }}" {% if st %}style="{{ st }}"{% endif %}>{{ status }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="settings-status-overview-section">
+                    <h3>Aktuelle Zahlungs-Status</h3>
+                    <div class="settings-status-badge-list">
+                        {% for status in status_cfg.payment_statuses %}
+                        {% set st = status_inline_style(status, 'payment') %}
+                        <span class="status-badge status-{{ status|status_class }}" {% if st %}style="{{ st }}"{% endif %}>{{ status }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-custom-status-grid">
+                <div class="settings-custom-status-card">
+                    <h4>Eigene Rechnungs-Status</h4>
+                    <div class="settings-custom-status-list" data-custom-status-list="invoice"></div>
+                </div>
+                <div class="settings-custom-status-card">
+                    <h4>Eigene Zahlungs-Status</h4>
+                    <div class="settings-custom-status-list" data-custom-status-list="payment"></div>
+                </div>
+            </div>
+
+            <textarea id="custom_invoice_statuses" name="custom_invoice_statuses" class="settings-hidden-input" data-hidden-target="invoice-statuses">{{ custom_invoice_statuses_text or '' }}</textarea>
+            <textarea id="custom_payment_statuses" name="custom_payment_statuses" class="settings-hidden-input" data-hidden-target="payment-statuses">{{ custom_payment_statuses_text or '' }}</textarea>
+            <textarea id="custom_invoice_status_colors" name="custom_invoice_status_colors" class="settings-hidden-input" data-hidden-target="invoice-colors">{{ custom_invoice_status_colors_text or '' }}</textarea>
+            <textarea id="custom_payment_status_colors" name="custom_payment_status_colors" class="settings-hidden-input" data-hidden-target="payment-colors">{{ custom_payment_status_colors_text or '' }}</textarea>
         </div>
 
-        <div class="form-group" style="min-width: 100%;">
-            <label for="custom_payment_statuses">Zusätzliche Zahlungs-Status (optional)</label>
-            <textarea
-                id="custom_payment_statuses"
-                name="custom_payment_statuses"
-                class="form-input"
-                rows="4"
-                placeholder="Ein Status pro Zeile, z.B.&#10;Zur Prüfung&#10;Rückfrage Kunde"
-            >{{ custom_payment_statuses_text or '' }}</textarea>
-            <small class="text-muted">
-                Diese Status erscheinen in der manuellen Status-Auswahl bei Zahlungen.
-            </small>
-        </div>
+        <div class="settings-status-overlay" data-status-overlay hidden>
+            <div class="settings-status-overlay-backdrop" data-status-overlay-backdrop data-status-overlay-close></div>
+            <div class="settings-status-overlay-dialog" role="dialog" aria-modal="true" aria-label="Status hinzufügen">
+                <div class="settings-status-overlay-head">
+                    <h3>Status hinzufügen</h3>
+                    <button type="button" class="settings-status-overlay-x" data-status-overlay-close aria-label="Schließen">✕</button>
+                </div>
 
-        <div class="form-group" style="min-width: 100%;">
-            <label for="custom_invoice_status_colors">Farben für Rechnungs-Status (optional)</label>
-            <textarea
-                id="custom_invoice_status_colors"
-                name="custom_invoice_status_colors"
-                class="form-input"
-                rows="5"
-                placeholder="Format: Status=Farbe&#10;Offen=rot&#10;In Klärung=orange&#10;Widerspruch=lila"
-            >{{ custom_invoice_status_colors_text or '' }}</textarea>
-            <small class="text-muted">
-                Erlaubte Farben: grau, gruen, rot, orange, blau, lila, gelb, tuerkis.
-            </small>
-        </div>
+                <div class="settings-status-overlay-body">
+                    <label class="settings-status-target-label">Hinzufügen bei</label>
+                    <div class="settings-status-target-group">
+                        <label class="settings-status-target-option">
+                            <input type="radio" name="settings_status_target" value="invoice" data-status-target checked>
+                            <span>Rechnungen</span>
+                        </label>
+                        <label class="settings-status-target-option">
+                            <input type="radio" name="settings_status_target" value="payment" data-status-target>
+                            <span>Zahlungen</span>
+                        </label>
+                    </div>
 
-        <div class="form-group" style="min-width: 100%;">
-            <label for="custom_payment_status_colors">Farben für Zahlungs-Status (optional)</label>
-            <textarea
-                id="custom_payment_status_colors"
-                name="custom_payment_status_colors"
-                class="form-input"
-                rows="5"
-                placeholder="Format: Status=Farbe&#10;Zugeordnet=gruen&#10;Zur Prüfung=gelb"
-            >{{ custom_payment_status_colors_text or '' }}</textarea>
-            <small class="text-muted">
-                Die Farblogik greift in Listen und Detailansichten.
-            </small>
+                    <label for="settings_new_status_name">Statusname</label>
+                    <input id="settings_new_status_name" type="text" class="form-input" data-status-name-input placeholder="z.B. Rückfrage Kunde" maxlength="60">
+
+                    <label for="settings_new_status_color">Statusfarbe (frei wählbar)</label>
+                    <div class="settings-color-picker-row">
+                        <input id="settings_new_status_color" type="color" value="#2563eb" data-status-color-input>
+                        <span class="settings-color-value" data-status-color-value>#2563eb</span>
+                    </div>
+                </div>
+
+                <div class="settings-status-overlay-actions">
+                    <button type="button" class="btn btn-primary" data-status-add-confirm>Hinzufügen</button>
+                    <button type="button" class="btn btn-secondary" data-status-overlay-close>Abbrechen</button>
+                </div>
+            </div>
         </div>
+        <script type="application/json" id="settings-status-data">
+            {{ {
+                "invoiceStatuses": custom_invoice_statuses_list,
+                "paymentStatuses": custom_payment_statuses_list,
+                "invoiceColors": status_cfg.invoice_status_colors,
+                "paymentColors": status_cfg.payment_status_colors
+            } | tojson }}
+        </script>
         <button type="submit" class="btn btn-primary">💾 Einstellungen speichern</button>
     </form>
 </div>

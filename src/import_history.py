@@ -20,7 +20,10 @@ def _json_dumps(value):
 def _json_loads(value, default=None):
     if not value:
         return default
-    return json.loads(value)
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
 
 
 def _fetch_invoice_row(conn, invoice_id):
@@ -304,15 +307,21 @@ def rollback_import_batch(import_batch_id, db_path=None):
 
 def _build_item_preview(item):
     after_state = _json_loads(item["after_state"], {}) or {}
+    doc_type = str(after_state.get("document_type") or "").strip().lower()
+    status = str(after_state.get("status") or "").strip().lower()
+    is_credit_note = item["entity_type"] == "invoice" and (
+        doc_type == "gutschrift" or status == "gutschrift"
+    )
     preview = {
         "entity_type": item["entity_type"],
+        "display_type": "Gutschrift" if is_credit_note else ("Rechnung" if item["entity_type"] == "invoice" else "Zahlung"),
         "entity_id": item["entity_id"],
         "action": item["action"],
     }
     if item["entity_type"] == "invoice":
         preview.update(
             {
-                "title": f"Rechnung #{item['entity_id']}",
+                "title": f"{'Gutschrift' if is_credit_note else 'Rechnung'} #{item['entity_id']}",
                 "subtitle": after_state.get("name") or "—",
                 "amount": after_state.get("amount_gross"),
                 "date": after_state.get("issue_date"),
