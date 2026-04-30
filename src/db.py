@@ -133,10 +133,70 @@ def _run_lightweight_migrations(conn):
 
         CREATE INDEX IF NOT EXISTS idx_invoice_reminders_invoice
           ON invoice_reminders(invoice_id);
+
+        CREATE TABLE IF NOT EXISTS manual_change_log (
+          change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_audit_id INTEGER UNIQUE,
+          entry_origin TEXT NOT NULL DEFAULT 'auto',
+          is_resolved INTEGER DEFAULT 0,
+          resolved_at TEXT,
+          change_scope TEXT NOT NULL,
+          invoice_id INTEGER,
+          payment_id INTEGER,
+          action_code TEXT NOT NULL,
+          action_label TEXT NOT NULL,
+          before_value TEXT,
+          after_value TEXT,
+          note TEXT,
+          changed_by TEXT,
+          changed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(invoice_id) REFERENCES invoices(invoice_id),
+          FOREIGN KEY(payment_id) REFERENCES payments(payment_id),
+          FOREIGN KEY(source_audit_id) REFERENCES audit_log(audit_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_manual_change_log_changed_at
+          ON manual_change_log(changed_at);
+
+        CREATE INDEX IF NOT EXISTS idx_manual_change_log_invoice
+          ON manual_change_log(invoice_id);
+
+        CREATE INDEX IF NOT EXISTS idx_manual_change_log_payment
+          ON manual_change_log(payment_id);
+        """
+    )
+    _ensure_column(conn, "manual_change_log", "source_audit_id", "source_audit_id INTEGER")
+    _ensure_column(conn, "manual_change_log", "entry_origin", "entry_origin TEXT NOT NULL DEFAULT 'auto'")
+    _ensure_column(conn, "manual_change_log", "is_resolved", "is_resolved INTEGER DEFAULT 0")
+    _ensure_column(conn, "manual_change_log", "resolved_at", "resolved_at TEXT")
+    conn.execute(
+        """
+        UPDATE manual_change_log
+        SET entry_origin = 'auto'
+        WHERE entry_origin IS NULL OR TRIM(entry_origin) = ''
+        """
+    )
+    conn.execute(
+        """
+        UPDATE manual_change_log
+        SET entry_origin = CASE
+            WHEN LOWER(TRIM(entry_origin)) IN ('manual', 'manuell') THEN 'manual'
+            ELSE 'auto'
+        END
+        """
+    )
+    conn.execute(
+        """
+        UPDATE manual_change_log
+        SET is_resolved = CASE
+            WHEN COALESCE(is_resolved, 0) <> 0 THEN 1
+            ELSE 0
+        END
         """
     )
     _backfill_invoice_document_type(conn)
     _backfill_special_payment_flags(conn)
+    _backfill_manual_change_log_from_audit(conn)
 
 
 def _backfill_special_payment_flags(conn):
@@ -182,6 +242,52 @@ def _backfill_invoice_document_type(conn):
                 "UPDATE invoices SET document_type = ? WHERE invoice_id = ?",
                 (target_doc_type, row["invoice_id"]),
             )
+
+
+def _backfill_manual_change_log_from_audit(conn):
+    """Seed manual change log from existing manual audit entries (idempotent)."""
+    conn.executescript(
+        """
+        INSERT INTO manual_change_log(
+            source_audit_id,
+            change_scope,
+            invoice_id,
+            payment_id,
+            action_code,
+            action_label,
+            changed_by,
+            changed_at
+        )
+        SELECT
+            a.audit_id,
+            'payment',
+            a.invoice_id,
+            a.payment_id,
+            COALESCE(NULLIF(TRIM(a.rule_used), ''), 'manual_audit'),
+            CASE
+                WHEN COALESCE(a.rule_used, '') = 'manual_single' THEN 'Zahlung manuell zugeordnet'
+                WHEN COALESCE(a.rule_used, '') = 'manual_split' THEN 'Zahlung manuell aufgeteilt'
+                WHEN COALESCE(a.rule_used, '') = 'manual_split_child' THEN 'Split-Teilzahlung manuell erstellt'
+                WHEN COALESCE(a.rule_used, '') = 'manual_unassigned' THEN 'Zahlungszuordnung manuell entfernt'
+                ELSE 'Manuelle Zahlungsänderung (Audit)'
+            END,
+            COALESCE(NULLIF(TRIM(a.user), ''), 'manual'),
+            COALESCE(NULLIF(TRIM(a.ts), ''), CURRENT_TIMESTAMP)
+        FROM audit_log a
+        WHERE COALESCE(a.automated, 1) = 0
+          AND COALESCE(a.rule_used, '') NOT IN (
+                'manual_single',
+                'manual_split',
+                'manual_split_child',
+                'manual_unassigned'
+          )
+          AND NOT EXISTS (
+                SELECT 1
+                FROM manual_change_log m
+                WHERE m.source_audit_id = a.audit_id
+          );
+        """
+    )
 
 
 def query_db(query, args=(), one=False, db_path=None):

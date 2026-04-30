@@ -4,11 +4,14 @@
 {% block content %}
 {% set eff_status = payment_effective_status(pay) %}
 {% set payment_status_style = status_inline_style(eff_status, 'payment') %}
+{% set current_page_url = request.full_path[:-1] if request.full_path.endswith('?') else request.full_path %}
+{% set next_url = (request.args.get('next') or '').strip() %}
+{% set back_url = next_url if next_url.startswith('/') and not next_url.startswith('//') else url_for('zahlungen') %}
 <div class="page-hero">
     <div>
         <p class="page-kicker">Zahlungsdetail</p>
         <div class="detail-header" style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
-            <a href="{{ url_for('zahlungen') }}" class="btn btn-secondary">← Zurück</a>
+            <a href="{{ back_url }}" class="btn btn-secondary">← Zurück</a>
             <h1 style="margin-bottom: 0;">Zahlung #{{ pay.payment_id }}</h1>
         </div>
         <p class="page-desc">
@@ -154,7 +157,7 @@
     </div>
 </div>
 
-<div class="detail-action-grid">
+<div class="detail-action-grid payment-action-grid">
     <div class="card">
         <h2>Bemerkung zur Zahlung</h2>
         <form method="POST" action="{{ url_for('zahlung_update_bemerkung', payment_id=pay.payment_id) }}">
@@ -193,30 +196,136 @@
         </form>
     </div>
 
-    <div class="card">
+    <div class="card payment-action-wide">
         <h2>Manuelle Zuordnung</h2>
         <p class="page-desc">
             Diese Aktionen überschreiben die aktuelle Zuordnung. Manuelle Zuordnungen bleiben bei
             "Matching starten" und "Status aktualisieren" bestehen.
         </p>
 
-        <form method="POST" action="{{ url_for('zahlung_manual_assign', payment_id=pay.payment_id) }}" class="inline-form" style="margin-bottom: 16px;">
-            <div class="form-group">
-                <label for="manual_invoice_id">Rechnung manuell setzen</label>
-                <input type="number" name="invoice_id" id="manual_invoice_id" class="form-input" placeholder="z.B. 260644" required>
-            </div>
-            <button type="submit" class="btn btn-primary">💾 Auf Rechnung zuordnen</button>
-        </form>
+        <div class="manual-assignment-sections">
+            <div class="manual-assignment-section" data-manual-section data-expanded="0">
+                <div class="manual-assignment-section-head">
+                    <h3>Einfach zuordnen</h3>
+                    <button
+                        type="button"
+                        class="btn btn-secondary manual-assignment-toggle"
+                        data-manual-toggle
+                        data-open-label="Assistent anzeigen"
+                        data-close-label="Assistent ausblenden"
+                        aria-expanded="false"
+                    >
+                        Assistent anzeigen
+                    </button>
+                </div>
+                <p class="text-muted manual-assignment-helper">
+                    Rechnungsnummer weiter direkt eintippen. Bei Bedarf passende Vorschläge über den Assistenten übernehmen.
+                </p>
 
-        <form method="POST" action="{{ url_for('zahlung_manual_split', payment_id=pay.payment_id) }}" class="inline-form" style="align-items: stretch; margin-bottom: 16px;">
-            <div class="form-group" style="flex: 2; min-width: 320px;">
-                <label for="manual_split_allocations">Zahlung auf mehrere Rechnungen aufteilen</label>
-                <textarea name="allocations" id="manual_split_allocations" class="form-input" rows="4" placeholder="Eine Zeile pro Zuordnung, Format: Rechnungsnummer=Betrag&#10;260643=381,69&#10;260644=61,70" required></textarea>
+                <form method="POST" action="{{ url_for('zahlung_manual_assign', payment_id=pay.payment_id) }}" class="inline-form manual-quick-form" style="margin-bottom: 10px;" data-manual-single-form>
+                    <input type="hidden" name="next" value="{{ current_page_url }}">
+                    <div class="form-group">
+                        <label for="manual_invoice_id">Rechnung manuell setzen</label>
+                        <input type="number" name="invoice_id" id="manual_invoice_id" class="form-input" placeholder="z.B. 260644" required data-manual-single-invoice-input>
+                    </div>
+                    <button type="submit" class="btn btn-primary">💾 Auf Rechnung zuordnen</button>
+                </form>
+
+                <div class="manual-assignment-body" data-manual-body hidden>
+                    <div
+                        class="split-assistant"
+                        data-single-assistant
+                        data-payment-id="{{ pay.payment_id }}"
+                        data-candidates-url="{{ url_for('zahlung_manual_split_candidates', payment_id=pay.payment_id) }}"
+                    >
+                        <div class="split-assistant-header">
+                            <h4>Einfach-Assistent</h4>
+                            <span class="badge">Zahlungsbetrag {{ pay.amount_eur | format_eur }}</span>
+                        </div>
+                        <p class="text-muted">
+                            Suche nach Rechnungsnummer oder Name und übernimm Treffer direkt in das Eingabefeld.
+                        </p>
+                        <div class="split-assistant-toolbar">
+                            <input type="search" class="form-input split-assistant-search" data-single-search placeholder="Rechnungsnummer oder Name suchen…">
+                            <button type="button" class="btn btn-secondary split-assistant-search-btn" data-single-search-btn>Suchen</button>
+                            <button type="button" class="btn btn-secondary split-assistant-refresh-btn" data-single-refresh-btn>Vorschläge</button>
+                        </div>
+                        <div class="manual-assistant-results" data-single-results>
+                            <p class="split-assistant-empty">Assistent anzeigen, um Vorschläge zu laden…</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <button type="submit" class="btn btn-warning">🧩 Aufteilen und speichern</button>
-        </form>
+
+            <div class="manual-assignment-section" data-manual-section data-expanded="0">
+                <div class="manual-assignment-section-head">
+                    <h3>Aufteilen (Split)</h3>
+                    <button
+                        type="button"
+                        class="btn btn-secondary manual-assignment-toggle"
+                        data-manual-toggle
+                        data-open-label="Assistent anzeigen"
+                        data-close-label="Assistent ausblenden"
+                        aria-expanded="false"
+                    >
+                        Assistent anzeigen
+                    </button>
+                </div>
+                <p class="text-muted manual-assignment-helper">
+                    Aufteilung kann direkt als Text eingegeben werden. Der Split-Assistent bleibt optional ausklappbar.
+                </p>
+
+                <form method="POST" action="{{ url_for('zahlung_manual_split', payment_id=pay.payment_id) }}" class="inline-form manual-quick-form" style="align-items: stretch; margin-bottom: 10px;" data-split-form>
+                    <input type="hidden" name="next" value="{{ current_page_url }}">
+                    <div class="form-group" style="flex: 2; min-width: 320px;">
+                        <label for="manual_split_allocations">Zahlung auf mehrere Rechnungen aufteilen</label>
+                        <textarea name="allocations" id="manual_split_allocations" class="form-input" rows="3" placeholder="Eine Zeile pro Zuordnung, Format: Rechnungsnummer=Betrag&#10;260643=381,69&#10;260644=61,70" required data-split-textarea>{% if split_invoices %}{% for split in split_invoices %}{{ split.invoice_id }}={{ '%.2f'|format(split.amount_eur or 0)|replace('.', ',') }}{% if not loop.last %}
+{% endif %}{% endfor %}{% endif %}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning">🧩 Aufteilen und speichern</button>
+                </form>
+
+                <div class="manual-assignment-body" data-manual-body hidden>
+                    <div
+                        class="split-assistant"
+                        data-split-assistant
+                        data-payment-id="{{ pay.payment_id }}"
+                        data-payment-amount="{{ '%.2f'|format((pay.amount_eur or 0)|abs) }}"
+                        data-candidates-url="{{ url_for('zahlung_manual_split_candidates', payment_id=pay.payment_id) }}"
+                    >
+                        <div class="split-assistant-header">
+                            <h3>Split-Assistent</h3>
+                            <span class="badge">Zahlungsbetrag {{ pay.amount_eur | format_eur }}</span>
+                        </div>
+                        <p class="text-muted">
+                            Suche Rechnungen direkt hier, übernimm passende Vorschläge und erstelle die Aufteilung ohne die Seite zu verlassen.
+                        </p>
+                        <div class="split-assistant-toolbar">
+                            <input type="search" class="form-input split-assistant-search" data-split-search placeholder="Rechnungsnummer oder Name suchen…">
+                            <button type="button" class="btn btn-secondary split-assistant-search-btn" data-split-search-btn>Suchen</button>
+                            <button type="button" class="btn btn-secondary split-assistant-refresh-btn" data-split-refresh-btn>Vorschläge</button>
+                        </div>
+                        <div class="split-assistant-balance">
+                            <span>Geplante Summe: <strong data-split-planned>0,00 €</strong></span>
+                            <span>Rest: <strong class="split-assistant-remaining is-open" data-split-remaining>{{ pay.amount_eur | format_eur }}</strong></span>
+                        </div>
+                        <div class="split-assistant-selected" data-split-selected>
+                            <p class="split-assistant-empty">Noch keine Rechnungen ausgewählt.</p>
+                        </div>
+                        <div class="split-assistant-actions">
+                            <button type="button" class="btn btn-secondary" data-split-fill-textarea>Auswahl in Aufteilung übernehmen</button>
+                            <button type="button" class="btn btn-secondary" data-split-clear>Auswahl leeren</button>
+                        </div>
+                        <div class="split-assistant-results" data-split-results>
+                            <p class="split-assistant-empty">Assistent anzeigen, um Vorschläge zu laden…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <form method="POST" action="{{ url_for('zahlung_manual_clear', payment_id=pay.payment_id) }}">
+            <input type="hidden" name="next" value="{{ current_page_url }}">
             <button type="submit" class="btn btn-danger" onclick="return confirm('Aktuelle Zuordnung wirklich entfernen?')">🗑️ Zuordnung entfernen</button>
         </form>
     </div>

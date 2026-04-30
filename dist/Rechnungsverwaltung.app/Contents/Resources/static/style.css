@@ -907,6 +907,262 @@ h2 {
     color: var(--color-text-secondary);
 }
 
+.manual-assignment-sections {
+    display: grid;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.manual-assignment-section {
+    border: 1px solid rgba(195, 198, 215, 0.62);
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 14px;
+}
+
+.manual-assignment-section.is-expanded {
+    border-color: rgba(37, 99, 235, 0.32);
+    background: #f7faff;
+}
+
+.manual-assignment-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.manual-assignment-section-head h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.manual-assignment-toggle {
+    padding: 8px 12px;
+    font-size: 0.84rem;
+    white-space: nowrap;
+}
+
+.manual-assignment-helper {
+    margin: 0 0 10px;
+}
+
+.manual-assignment-body[hidden] {
+    display: none !important;
+}
+
+.manual-quick-form {
+    margin-bottom: 0;
+}
+
+.manual-assistant-results {
+    display: grid;
+    gap: 8px;
+    max-height: 300px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.split-assistant {
+    margin-bottom: 16px;
+    padding: 14px;
+    border: 1px solid rgba(195, 198, 215, 0.65);
+    border-radius: 14px;
+    background: #f8fafc;
+}
+
+.split-assistant-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.split-assistant-header h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.split-assistant-header h4 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.split-assistant-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.split-assistant-search {
+    flex: 1 1 260px;
+    min-width: 220px;
+}
+
+.split-assistant-search-btn,
+.split-assistant-refresh-btn {
+    flex-shrink: 0;
+}
+
+.split-assistant-balance {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    margin: 8px 0 12px;
+    font-size: 0.9rem;
+    color: #475467;
+}
+
+.split-assistant-remaining.is-open {
+    color: #b45309;
+}
+
+.split-assistant-remaining.is-ok {
+    color: #15803d;
+}
+
+.split-assistant-remaining.is-over {
+    color: #b91c1c;
+}
+
+.split-assistant-empty {
+    margin: 0;
+    color: #667085;
+    font-size: 0.9rem;
+}
+
+.split-assistant-selected {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.split-assistant-selected-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 138px auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(195, 198, 215, 0.62);
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.split-assistant-selected-meta {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.split-assistant-selected-meta strong {
+    font-size: 0.9rem;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.split-assistant-selected-meta span {
+    font-size: 0.8rem;
+    color: #667085;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.split-assistant-selected-amount .form-input {
+    padding: 8px 10px;
+    font-size: 0.9rem;
+}
+
+.split-assistant-remove {
+    padding: 8px 10px;
+    font-size: 0.82rem;
+}
+
+.split-assistant-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.split-assistant-results {
+    display: grid;
+    gap: 8px;
+    max-height: 300px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.split-assistant-result {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(195, 198, 215, 0.62);
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.split-assistant-result.is-selected {
+    border-color: rgba(37, 99, 235, 0.42);
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.split-assistant-result-content {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.split-assistant-result-content strong {
+    font-size: 0.9rem;
+    color: #0f172a;
+}
+
+.split-assistant-result-content span {
+    font-size: 0.8rem;
+    color: #667085;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.split-assistant-reasons {
+    color: #2563eb !important;
+}
+
+.split-assistant-add {
+    padding: 8px 10px;
+    font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+    .manual-assignment-section-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .manual-assignment-toggle {
+        width: 100%;
+    }
+
+    .split-assistant-selected-row,
+    .split-assistant-result {
+        grid-template-columns: 1fr;
+    }
+
+    .split-assistant-selected-amount {
+        max-width: 220px;
+    }
+}
+
 .settings-hidden-input {
     display: none !important;
 }
@@ -1533,6 +1789,254 @@ h2 {
     color: #667085;
 }
 
+.steuerbuero-filter-form {
+    margin-top: 8px;
+}
+
+.steuerbuero-month-field {
+    max-width: 280px;
+}
+
+.steuerbuero-status-field {
+    max-width: 220px;
+}
+
+.steuerbuero-summary-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.steuerbuero-summary-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(195, 198, 215, 0.64);
+    background: #f8fafc;
+    color: #475467;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.steuerbuero-add-form-clean {
+    display: grid;
+    gap: 12px;
+}
+
+.steuerbuero-add-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px 12px;
+    align-items: end;
+}
+
+.steuerbuero-action-label-field {
+    grid-column: span 2;
+}
+
+.steuerbuero-optional-fields {
+    border: 1px solid rgba(195, 198, 215, 0.6);
+    border-radius: 12px;
+    background: #f8fafc;
+    padding: 8px 10px;
+}
+
+.steuerbuero-optional-fields summary {
+    list-style: none;
+    cursor: pointer;
+    color: #475467;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.steuerbuero-optional-fields summary::-webkit-details-marker {
+    display: none;
+}
+
+.steuerbuero-optional-fields[open] summary {
+    margin-bottom: 10px;
+}
+
+.steuerbuero-optional-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px 12px;
+}
+
+.steuerbuero-add-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.steuerbuero-inline-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.9rem;
+    color: #556070;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.steuerbuero-list {
+    display: grid;
+    gap: 12px;
+}
+
+.steuerbuero-item {
+    border: 1px solid rgba(195, 198, 215, 0.6);
+    border-radius: 16px;
+    background: #fcfdff;
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+}
+
+.steuerbuero-item.is-resolved {
+    background: #f8fbf8;
+}
+
+.steuerbuero-item-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.steuerbuero-item-title-wrap h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.steuerbuero-item-meta {
+    margin: 3px 0 0;
+    color: #64748b;
+    font-size: 0.86rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.steuerbuero-item-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.steuerbuero-item-links {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    color: #475467;
+    font-size: 0.9rem;
+}
+
+.steuerbuero-delta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+}
+
+.steuerbuero-delta-box {
+    border: 1px solid rgba(195, 198, 215, 0.6);
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 9px 11px;
+    min-height: 68px;
+}
+
+.steuerbuero-delta-label {
+    margin: 0 0 4px;
+    color: #64748b;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.steuerbuero-delta-value {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #334155;
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+
+.steuerbuero-item-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.steuerbuero-action-form {
+    margin: 0;
+}
+
+.steuerbuero-edit-details {
+    width: 100%;
+}
+
+.steuerbuero-edit-details summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.steuerbuero-edit-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.steuerbuero-edit-form-clean {
+    margin-top: 10px;
+    border: 1px solid rgba(195, 198, 215, 0.62);
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+}
+
+.steuerbuero-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px 12px;
+}
+
+.steuerbuero-edit-grid label {
+    display: grid;
+    gap: 4px;
+    color: #556070;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.steuerbuero-edit-grid-wide {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.steuerbuero-edit-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
 .doc-type-tabs {
     display: flex;
     align-items: center;
@@ -1879,7 +2383,7 @@ h2 {
 .sticky-table-shell {
     width: 100%;
     max-width: 100%;
-    max-height: calc(100vh - 330px);
+    max-height: calc(100vh - 250px);
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable both-edges;
@@ -1903,7 +2407,7 @@ h2 {
 }
 
 .data-table th {
-    padding: 12px 16px;
+    padding: 10px 16px;
     border-bottom: 1px solid rgba(195, 198, 215, 0.7);
     color: #667085;
     font-size: 0.74rem;
@@ -1928,9 +2432,10 @@ h2 {
     border-top: none;
     border-left: none;
     border-right: none;
-    padding: 14px 16px;
+    padding: 10px 16px;
     box-shadow: none;
     vertical-align: middle;
+    line-height: 1.22;
     white-space: nowrap;
 }
 
@@ -2356,7 +2861,7 @@ h2 {
 }
 
 .app-shell.table-focus-mode .sticky-table-shell {
-    max-height: calc(100vh - 300px);
+    max-height: calc(100vh - 240px);
 }
 
 .app-shell.table-focus-mode .table-focus-fab {
@@ -2398,12 +2903,12 @@ h2 {
 .metric-strip {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 18px;
-    margin-bottom: 24px;
+    gap: 14px;
+    margin-bottom: 18px;
 }
 
 .metric-card {
-    padding: 24px;
+    padding: 18px 20px;
     border-radius: 22px;
     background: rgba(255,255,255,0.92);
     border: 1px solid rgba(195, 198, 215, 0.34);
@@ -2445,7 +2950,7 @@ h2 {
 
 .metric-card-label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     font-size: 0.74rem;
     font-weight: 800;
     text-transform: uppercase;
@@ -2454,14 +2959,14 @@ h2 {
 }
 
 .metric-card-value {
-    font-size: clamp(1.5rem, 2vw, 2.35rem);
+    font-size: clamp(1.4rem, 1.8vw, 2.05rem);
     font-weight: 800;
     letter-spacing: -0.04em;
     color: #0f172a;
 }
 
 .metric-card-caption {
-    margin-top: 8px;
+    margin-top: 6px;
     font-size: 0.85rem;
     color: #667085;
 }
@@ -2530,8 +3035,87 @@ h2 {
 .detail-action-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 22px;
-    margin-bottom: 24px;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.payment-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.payment-action-grid .payment-action-wide {
+    grid-column: 1 / -1;
+}
+
+/* Detail-Widgets kompakter: gilt fuer Rechnungs- und Zahlungsdetail. */
+.detail-grid {
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.detail-grid .detail-card,
+.detail-action-grid .card {
+    padding: 20px;
+}
+
+.detail-grid .detail-card h2,
+.detail-action-grid .card h2 {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+}
+
+.detail-grid .detail-list {
+    gap: 10px 18px;
+}
+
+.detail-action-grid .inline-form {
+    gap: 12px;
+}
+
+.detail-action-grid .form-group label {
+    margin-bottom: 4px;
+}
+
+.detail-action-grid .form-input {
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 12px;
+}
+
+.detail-action-grid textarea.form-input {
+    min-height: 96px;
+    line-height: 1.35;
+}
+
+.detail-action-grid .btn {
+    min-height: 44px;
+    padding: 10px 16px;
+    border-radius: 12px;
+}
+
+.manual-assignment-sections {
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.manual-assignment-section {
+    padding: 10px;
+    border-radius: 12px;
+}
+
+.manual-assignment-section-head {
+    margin-bottom: 2px;
+}
+
+.manual-assignment-helper {
+    margin: 0 0 6px;
+}
+
+.split-assistant {
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 12px;
 }
 
 .upload-grid {
@@ -2725,11 +3309,38 @@ a:hover {
     .settings-status-overlay-actions .btn {
         width: 100%;
     }
+
+    .steuerbuero-action-label-field {
+        grid-column: span 1;
+    }
+
+    .steuerbuero-add-actions,
+    .steuerbuero-item-actions,
+    .steuerbuero-edit-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .steuerbuero-add-actions .btn,
+    .steuerbuero-item-actions .btn,
+    .steuerbuero-edit-actions .btn {
+        width: 100%;
+    }
 }
 
 @media (max-width: 1380px) {
     .filter-form {
         flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 1180px) {
+    .payment-action-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .payment-action-grid .payment-action-wide {
+        grid-column: auto;
     }
 }
 
@@ -2744,7 +3355,7 @@ a:hover {
     }
 
     .sticky-table-shell {
-        max-height: calc(100vh - 280px);
+        max-height: calc(100vh - 220px);
         overflow: auto;
     }
 

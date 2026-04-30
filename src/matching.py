@@ -125,7 +125,7 @@ def _sanitize_reference_text(text):
 
 
 def _is_plausible_invoice_number(raw):
-    """Keep only 6-digit invoice IDs with plausible year prefix (20..currentYY)."""
+    """Keep only 6-digit invoice IDs with plausible year prefix (20..currentYY+2)."""
     if not raw or not re.fullmatch(r"\d{6}", str(raw)):
         return False
     if str(raw).startswith(("8", "9")):
@@ -133,7 +133,18 @@ def _is_plausible_invoice_number(raw):
         return True
     yy = int(str(raw)[:2])
     current_yy = datetime.now().year % 100
-    return 20 <= yy <= current_yy
+    return 20 <= yy <= min(99, current_yy + 2)
+
+
+def _is_structured_invoice_reference_12(raw):
+    """Return True for 12-digit refs where first 6 digits encode the invoice id."""
+    if not raw or not re.fullmatch(r"\d{12}", str(raw)):
+        return False
+    if str(raw)[6] != "1":
+        return False
+    yy = int(str(raw)[:2])
+    current_yy = datetime.now().year % 100
+    return 20 <= yy <= min(99, current_yy + 2)
 
 
 def extract_invoice_number(text):
@@ -155,7 +166,11 @@ def extract_invoice_numbers(text):
             try:
                 raw = m.group(1)
                 # Truncate overly long numbers (e.g. combined reference strings)
-                if len(raw) > 9:
+                if len(raw) == 12:
+                    if not _is_structured_invoice_reference_12(raw):
+                        continue
+                    raw = raw[:6]
+                elif len(raw) > 9:
                     raw = raw[:6]
                 if not _is_plausible_invoice_number(raw):
                     continue

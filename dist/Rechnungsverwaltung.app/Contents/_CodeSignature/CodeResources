@@ -6,7 +6,7 @@
 	<dict>
 		<key>Resources/base_library.zip</key>
 		<data>
-		YtBBfbKyPidz0JsUHKI5xb3plmY=
+		icVVZBkvHrt7o1pO284wdzq3Mw0=
 		</data>
 		<key>Resources/cryptography-46.0.6.dist-info/INSTALLER</key>
 		<data>
@@ -142,15 +142,15 @@
 		</data>
 		<key>Resources/schema/schema.sql</key>
 		<data>
-		xUiMxUZ4eeNGVce/e7gLamHvf/M=
+		hmihX9FHaCw2sBq5JcqQt4q25Ng=
 		</data>
 		<key>Resources/static/app.js</key>
 		<data>
-		Z5DFDx1GEqF7BggaXFtHZmG1uT0=
+		CTOyoMAyqYq3T8g5BIMQmubjQ2Y=
 		</data>
 		<key>Resources/static/style.css</key>
 		<data>
-		Csd9HsvCNxoDEV/FUK8pdhb40A4=
+		TruNKGDC5ZxYJV0K+pjJMBQp4Jc=
 		</data>
 		<key>Resources/templates/audit.html</key>
 		<data>
@@ -158,7 +158,7 @@
 		</data>
 		<key>Resources/templates/base.html</key>
 		<data>
-		vHYi6ng9uKHvQ3Q/IwqR0dlubcg=
+		W+Uthdayr1nRuwRiiGylugrBMSc=
 		</data>
 		<key>Resources/templates/dashboard.html</key>
 		<data>
@@ -180,21 +180,21 @@
 		<data>
 		Ch+2QU0ISO47gX5hOQd/+28CvdI=
 		</data>
+		<key>Resources/templates/steuerbuero.html</key>
+		<data>
+		vQLmVcmbT6h0lL3smuTsE0Mv5ak=
+		</data>
 		<key>Resources/templates/upload.html</key>
 		<data>
-		qhpCbcMp1lnYUz7c61z3I/sLuEE=
+		lZ5gNUV8ag1nd+dLsKtyb/3fVLk=
 		</data>
 		<key>Resources/templates/zahlung_detail.html</key>
 		<data>
-		0DU1Vy/HOeD9ritpG1f6pK08HWY=
+		gqb9hc51FhgIQ/DNagdwa8Xmq1g=
 		</data>
 		<key>Resources/templates/zahlungen.html</key>
 		<data>
-		J8miFYMDcMREXAhK7CG4/ee+BZs=
-		</data>
-		<key>Resources/templates/zuordnungen.html</key>
-		<data>
-		9UuQO59nUNCwd/bDwKmnWR3AX/Q=
+		XXJsVPT9ItcGcuzuhifsVKYy7YA=
 		</data>
 		<key>Resources/werkzeug-3.1.7.dist-info/INSTALLER</key>
 		<data>
@@ -967,7 +967,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			6X7s+G3su0ldx5XJZsniVODadxNkIod6RmkZpnsudVk=
+			3HYIpz/0zPlF2PgODpe6oAIvkbq82s2d/9hoMn9Awpg=
 			</data>
 		</dict>
 		<key>Resources/cryptography</key>
@@ -1230,21 +1230,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			0lWskcuzfa2UukNruW+ixDCON9hOQPNbQzCucnw+Rso=
+			Zc6CNTBzrYOH2krSSxuyx0Bzd1XjPIy1y+cHWjmXjE0=
 			</data>
 		</dict>
 		<key>Resources/static/app.js</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			DfI/1cCy3wMTpjsuTfDL06Hc3wbkImLCqgbre1CDKow=
+			HfE1YV4nF3jTPIt6YIYIZWZfOLhcc2jsr/S/HKRlGc0=
 			</data>
 		</dict>
 		<key>Resources/static/style.css</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			Cv+lFK+WLy32AEwtw/OP9DXteL6/CqrWFYrKOvExhfU=
+			kRJDefNC7q42wklxQnQItO79+V/1QpLETLslfu1306U=
 			</data>
 		</dict>
 		<key>Resources/templates/audit.html</key>
@@ -1258,7 +1258,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			TLj/+occUBcyk46FlEkd6mo3i9cHZfFq9kan8ghA6yw=
+			C4v/NaAuIGi450cC+moo4LIXYHm7OAE/1cnILr6FmW4=
 			</data>
 		</dict>
 		<key>Resources/templates/dashboard.html</key>
@@ -1296,32 +1296,32 @@
 			/iCbkjkwayglw4M1EsbwrEJbxLPGQJ4sRuBaoTomthM=
 			</data>
 		</dict>
+		<key>Resources/templates/steuerbuero.html</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			w8MR82ENnkw9V684xzPzeRwYNtk8FuiGZsAD92QsriE=
+			</data>
+		</dict>
 		<key>Resources/templates/upload.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			eECA8UfcZ1Oa9oWNFMjQh2Rg+6g+iFw+mjTqFOKtjhs=
+			D81Oi50HUw9sLEvas/9FziqyxaxYTO1OYs4RubjtEFI=
 			</data>
 		</dict>
 		<key>Resources/templates/zahlung_detail.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			UJH/lBAe3yodv6PKJmDOypakv9cGCQXh/UrWEGcPj0M=
+			niAJNo6GbbReNhpLILy4CqM7QfMTqPQNfrewMU7v54M=
 			</data>
 		</dict>
 		<key>Resources/templates/zahlungen.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			Ef3xg1jIjn/N9bQIzNo06Z14kVKK7aw0jXXdYwzRr6E=
-			</data>
-		</dict>
-		<key>Resources/templates/zuordnungen.html</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			jUZjMGF4zBiOJuGo5g9+Pk//vXXv8aZcDoIXwFdAtZg=
+			5pGrgHTQLSQZb/i4+MdzdulZN89YxXTmrwC1mIFHbpc=
 			</data>
 		</dict>
 		<key>Resources/werkzeug-3.1.7.dist-info/INSTALLER</key>

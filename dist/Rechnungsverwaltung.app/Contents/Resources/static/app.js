@@ -526,6 +526,673 @@ function initInlineRemarkEditors() {
     });
 }
 
+function initManualSplitAssistant() {
+    const assistants = document.querySelectorAll("[data-split-assistant]");
+    if (!assistants.length) return;
+
+    function normalizeMoneyString(rawValue) {
+        let text = String(rawValue || "").trim();
+        if (!text) return "";
+        text = text.replace(/\s/g, "").replace(/€/g, "");
+        if (text.includes(",") && text.includes(".")) {
+            if (text.lastIndexOf(",") > text.lastIndexOf(".")) {
+                text = text.replace(/\./g, "").replace(",", ".");
+            } else {
+                text = text.replace(/,/g, "");
+            }
+        } else if (text.includes(",")) {
+            text = text.replace(/\./g, "").replace(",", ".");
+        } else if (/^-?\d{1,3}(\.\d{3})+$/.test(text)) {
+            text = text.replace(/\./g, "");
+        }
+        return text;
+    }
+
+    function parseMoney(rawValue) {
+        const normalized = normalizeMoneyString(rawValue);
+        if (!normalized) return Number.NaN;
+        const parsed = Number.parseFloat(normalized);
+        if (!Number.isFinite(parsed)) return Number.NaN;
+        return Math.round(parsed * 100) / 100;
+    }
+
+    function formatMoney(amount) {
+        const safe = Number.isFinite(amount) ? amount : 0;
+        try {
+            return new Intl.NumberFormat("de-DE", {
+                style: "currency",
+                currency: "EUR",
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }).format(safe);
+        } catch (_error) {
+            return safe.toFixed(2).replace(".", ",") + " €";
+        }
+    }
+
+    function formatMoneyInput(amount) {
+        const safe = Number.isFinite(amount) ? amount : 0;
+        return safe.toFixed(2).replace(".", ",");
+    }
+
+    function formatMoneyForTextarea(amount) {
+        return formatMoneyInput(amount);
+    }
+
+    assistants.forEach(function (assistant) {
+        const paymentId = Number.parseInt(assistant.dataset.paymentId || "", 10);
+        const paymentAmount = Math.abs(parseMoney(assistant.dataset.paymentAmount || "0")) || 0;
+        const endpoint =
+            (assistant.dataset.candidatesUrl || "").trim()
+            || (Number.isInteger(paymentId) ? ("/zahlungen/" + paymentId + "/manual/split/candidates") : "");
+
+        const searchInput = assistant.querySelector("[data-split-search]");
+        const searchBtn = assistant.querySelector("[data-split-search-btn]");
+        const refreshBtn = assistant.querySelector("[data-split-refresh-btn]");
+        const plannedEl = assistant.querySelector("[data-split-planned]");
+        const remainingEl = assistant.querySelector("[data-split-remaining]");
+        const selectedEl = assistant.querySelector("[data-split-selected]");
+        const resultsEl = assistant.querySelector("[data-split-results]");
+        const fillBtn = assistant.querySelector("[data-split-fill-textarea]");
+        const clearBtn = assistant.querySelector("[data-split-clear]");
+
+        const card = assistant.closest(".card") || document;
+        const section = assistant.closest("[data-manual-section]") || null;
+        const assistantBody = assistant.closest("[data-manual-body]") || null;
+        const splitForm = card.querySelector("[data-split-form]");
+        const splitTextarea = splitForm ? splitForm.querySelector("[data-split-textarea]") : null;
+        const splitNextInput = splitForm ? splitForm.querySelector("input[name='next']") : null;
+
+        if (!selectedEl || !resultsEl || !splitTextarea) return;
+
+        const selectedMap = new Map();
+        let latestCandidates = [];
+        let pendingQuery = "";
+        let hasLoadedInitially = false;
+
+        function setLoading(message) {
+            resultsEl.innerHTML = "";
+            const p = document.createElement("p");
+            p.className = "split-assistant-empty";
+            p.textContent = message;
+            resultsEl.appendChild(p);
+        }
+
+        function parseTextareaAllocations() {
+            const map = new Map();
+            const lines = String(splitTextarea.value || "").split(/\r?\n/);
+            lines.forEach(function (line) {
+                const raw = String(line || "").trim();
+                if (!raw) return;
+                const match = raw.match(/^(\d+)\s*=\s*(.+)$/);
+                if (!match) return;
+                const invoiceId = Number.parseInt(match[1], 10);
+                const amount = Math.abs(parseMoney(match[2]));
+                if (!Number.isInteger(invoiceId) || !Number.isFinite(amount) || amount <= 0) return;
+                map.set(invoiceId, amount);
+            });
+            return map;
+        }
+
+        function toSelectedRows() {
+            return Array.from(selectedMap.values()).sort(function (a, b) {
+                return a.invoice_id - b.invoice_id;
+            });
+        }
+
+        function getPlannedTotal() {
+            return toSelectedRows().reduce(function (sum, item) {
+                return sum + (Number(item.amount) || 0);
+            }, 0);
+        }
+
+        function updateBalance() {
+            const planned = Math.round(getPlannedTotal() * 100) / 100;
+            const remaining = Math.round((paymentAmount - planned) * 100) / 100;
+            if (plannedEl) {
+                plannedEl.textContent = formatMoney(planned);
+            }
+            if (remainingEl) {
+                remainingEl.textContent = formatMoney(remaining);
+                remainingEl.classList.remove("is-open", "is-ok", "is-over");
+                if (Math.abs(remaining) <= 0.01) {
+                    remainingEl.classList.add("is-ok");
+                } else if (remaining > 0) {
+                    remainingEl.classList.add("is-open");
+                } else {
+                    remainingEl.classList.add("is-over");
+                }
+            }
+        }
+
+        function upsertSelectedFromCandidate(candidate, preserveAmount) {
+            const existing = selectedMap.get(candidate.invoice_id);
+            const remaining = Math.round((paymentAmount - getPlannedTotal() + (existing ? Number(existing.amount || 0) : 0)) * 100) / 100;
+
+            let amount = Number(candidate.suggested_amount || 0);
+            if (!Number.isFinite(amount) || amount <= 0) {
+                const openAmount = Number(candidate.open_amount || 0);
+                amount = remaining > 0 && openAmount > 0 ? Math.min(openAmount, remaining) : openAmount;
+            }
+            amount = Math.round(Math.max(0, amount) * 100) / 100;
+
+            selectedMap.set(candidate.invoice_id, {
+                invoice_id: candidate.invoice_id,
+                name: candidate.name || (existing ? existing.name : ""),
+                status: candidate.status || (existing ? existing.status : ""),
+                open_amount: Number(candidate.open_amount || 0),
+                amount: preserveAmount && existing ? Number(existing.amount || 0) : amount,
+            });
+        }
+
+        function syncSelectedMetadataFromCandidates() {
+            latestCandidates.forEach(function (candidate) {
+                if (!selectedMap.has(candidate.invoice_id)) return;
+                upsertSelectedFromCandidate(candidate, true);
+            });
+        }
+
+        function renderSelected() {
+            selectedEl.innerHTML = "";
+            const rows = toSelectedRows();
+            if (!rows.length) {
+                const empty = document.createElement("p");
+                empty.className = "split-assistant-empty";
+                empty.textContent = "Noch keine Rechnungen ausgewählt.";
+                selectedEl.appendChild(empty);
+                updateBalance();
+                return;
+            }
+
+            rows.forEach(function (row) {
+                const rowEl = document.createElement("div");
+                rowEl.className = "split-assistant-selected-row";
+                rowEl.dataset.noRowNav = "1";
+
+                const meta = document.createElement("div");
+                meta.className = "split-assistant-selected-meta";
+
+                const title = document.createElement("strong");
+                title.textContent = "#" + row.invoice_id + (row.name ? " · " + row.name : "");
+                meta.appendChild(title);
+
+                const sub = document.createElement("span");
+                const statusPart = row.status ? ("Status: " + row.status) : "Status: —";
+                const openPart = "Restbetrag: " + formatMoney(Number(row.open_amount || 0));
+                sub.textContent = statusPart + " · " + openPart;
+                meta.appendChild(sub);
+                rowEl.appendChild(meta);
+
+                const amountWrap = document.createElement("div");
+                amountWrap.className = "split-assistant-selected-amount";
+                const amountInput = document.createElement("input");
+                amountInput.type = "text";
+                amountInput.className = "form-input";
+                amountInput.value = formatMoneyInput(Number(row.amount || 0));
+                amountInput.setAttribute("inputmode", "decimal");
+                amountInput.setAttribute("aria-label", "Betrag für Rechnung " + row.invoice_id);
+                amountInput.addEventListener("change", function () {
+                    const parsed = Math.abs(parseMoney(amountInput.value));
+                    if (!Number.isFinite(parsed) || parsed <= 0) {
+                        amountInput.value = formatMoneyInput(Number(row.amount || 0));
+                        return;
+                    }
+                    const updated = selectedMap.get(row.invoice_id);
+                    if (!updated) return;
+                    updated.amount = Math.round(parsed * 100) / 100;
+                    selectedMap.set(row.invoice_id, updated);
+                    amountInput.value = formatMoneyInput(updated.amount);
+                    updateBalance();
+                });
+                amountWrap.appendChild(amountInput);
+                rowEl.appendChild(amountWrap);
+
+                const removeBtn = document.createElement("button");
+                removeBtn.type = "button";
+                removeBtn.className = "btn btn-secondary split-assistant-remove";
+                removeBtn.textContent = "Entfernen";
+                removeBtn.addEventListener("click", function () {
+                    selectedMap.delete(row.invoice_id);
+                    renderSelected();
+                    renderResults(latestCandidates);
+                });
+                rowEl.appendChild(removeBtn);
+
+                selectedEl.appendChild(rowEl);
+            });
+            updateBalance();
+        }
+
+        function renderResults(candidates, explicitMessage) {
+            resultsEl.innerHTML = "";
+            const list = Array.isArray(candidates) ? candidates : [];
+            if (!list.length) {
+                const empty = document.createElement("p");
+                empty.className = "split-assistant-empty";
+                empty.textContent = explicitMessage || "Keine passenden Rechnungen gefunden.";
+                resultsEl.appendChild(empty);
+                return;
+            }
+
+            list.forEach(function (candidate) {
+                const item = document.createElement("div");
+                item.className = "split-assistant-result";
+                if (selectedMap.has(candidate.invoice_id)) {
+                    item.classList.add("is-selected");
+                }
+
+                const textWrap = document.createElement("div");
+                textWrap.className = "split-assistant-result-content";
+
+                const title = document.createElement("strong");
+                title.textContent = "#" + candidate.invoice_id + " · " + (candidate.name || "—");
+                textWrap.appendChild(title);
+
+                const meta = document.createElement("span");
+                meta.textContent =
+                    "Status: " + (candidate.status || "Offen")
+                    + " · Restbetrag: " + formatMoney(Number(candidate.open_amount || 0))
+                    + " · Vorschlag: " + formatMoney(Number(candidate.suggested_amount || 0));
+                textWrap.appendChild(meta);
+
+                if (Array.isArray(candidate.reasons) && candidate.reasons.length) {
+                    const reasons = document.createElement("span");
+                    reasons.className = "split-assistant-reasons";
+                    reasons.textContent = candidate.reasons.join(" · ");
+                    textWrap.appendChild(reasons);
+                }
+
+                item.appendChild(textWrap);
+
+                const addBtn = document.createElement("button");
+                addBtn.type = "button";
+                addBtn.className = "btn btn-secondary split-assistant-add";
+                addBtn.textContent = selectedMap.has(candidate.invoice_id) ? "Aktualisieren" : "Übernehmen";
+                addBtn.addEventListener("click", function () {
+                    upsertSelectedFromCandidate(candidate, false);
+                    renderSelected();
+                    renderResults(latestCandidates);
+                });
+                item.appendChild(addBtn);
+
+                resultsEl.appendChild(item);
+            });
+        }
+
+        function buildTextareaLines() {
+            return toSelectedRows()
+                .filter(function (item) {
+                    return Number.isFinite(item.amount) && item.amount > 0;
+                })
+                .map(function (item) {
+                    return String(item.invoice_id) + "=" + formatMoneyForTextarea(item.amount);
+                })
+                .join("\n");
+        }
+
+        function applyTextareaFromSelection() {
+            const text = buildTextareaLines();
+            if (!text) {
+                alert("Bitte zuerst mindestens eine Rechnung im Split-Assistenten auswählen.");
+                return false;
+            }
+            splitTextarea.value = text;
+            splitTextarea.dataset.fromAssistant = "1";
+            splitTextarea.dispatchEvent(new Event("change", { bubbles: true }));
+            splitTextarea.dispatchEvent(new Event("input", { bubbles: true }));
+            return true;
+        }
+
+        async function loadCandidates(query) {
+            if (!endpoint) return;
+            pendingQuery = String(query || "").trim();
+            setLoading("Vorschläge werden geladen…");
+            const url = new URL(endpoint, window.location.origin);
+            url.searchParams.set("limit", "36");
+            if (pendingQuery) {
+                url.searchParams.set("q", pendingQuery);
+            }
+
+            try {
+                const response = await fetch(url.toString(), {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload || payload.ok === false) {
+                    throw new Error((payload && payload.error) || ("HTTP " + response.status));
+                }
+                latestCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+                syncSelectedMetadataFromCandidates();
+                renderSelected();
+                const noResultMessage = pendingQuery
+                    ? "Keine Treffer für \"" + pendingQuery + "\"."
+                    : "Keine Vorschläge verfügbar.";
+                renderResults(latestCandidates, noResultMessage);
+            } catch (error) {
+                latestCandidates = [];
+                renderResults([], "Vorschläge konnten nicht geladen werden: " + (error && error.message ? error.message : "Unbekannter Fehler"));
+            }
+        }
+
+        function restoreSelectionFromTextarea() {
+            const parsed = parseTextareaAllocations();
+            parsed.forEach(function (amount, invoiceId) {
+                selectedMap.set(invoiceId, {
+                    invoice_id: invoiceId,
+                    name: "",
+                    status: "",
+                    open_amount: 0,
+                    amount: amount,
+                });
+            });
+        }
+
+        if (searchBtn && searchInput) {
+            searchBtn.addEventListener("click", function () {
+                loadCandidates(searchInput.value);
+            });
+            searchInput.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    loadCandidates(searchInput.value);
+                }
+            });
+        }
+
+        if (refreshBtn && searchInput) {
+            refreshBtn.addEventListener("click", function () {
+                searchInput.value = "";
+                loadCandidates("");
+            });
+        }
+
+        if (fillBtn) {
+            fillBtn.addEventListener("click", function () {
+                applyTextareaFromSelection();
+            });
+        }
+
+        if (clearBtn) {
+            clearBtn.addEventListener("click", function () {
+                selectedMap.clear();
+                splitTextarea.dataset.fromAssistant = "0";
+                renderSelected();
+                renderResults(latestCandidates);
+            });
+        }
+
+        if (splitTextarea) {
+            splitTextarea.addEventListener("input", function () {
+                if (splitTextarea.dataset.fromAssistant !== "1") return;
+                splitTextarea.dataset.fromAssistant = "0";
+            });
+        }
+
+        if (splitForm) {
+            splitForm.addEventListener("submit", function () {
+                if (!String(splitTextarea.value || "").trim() && selectedMap.size > 0) {
+                    applyTextareaFromSelection();
+                }
+                if (splitNextInput) {
+                    splitNextInput.value = buildNextUrlWithScroll(splitNextInput.value, splitForm);
+                }
+            });
+        }
+
+        restoreSelectionFromTextarea();
+        renderSelected();
+
+        function ensureInitialLoad() {
+            if (hasLoadedInitially) return;
+            hasLoadedInitially = true;
+            loadCandidates("");
+        }
+
+        if (assistantBody && assistantBody.hidden) {
+            setLoading("Assistent anzeigen, um Vorschläge zu laden…");
+            if (section) {
+                section.addEventListener("manual-section-toggle", function (event) {
+                    if (event && event.detail && event.detail.expanded) {
+                        ensureInitialLoad();
+                    }
+                });
+            }
+        } else {
+            ensureInitialLoad();
+        }
+    });
+}
+
+function initManualSingleAssistant() {
+    const assistants = document.querySelectorAll("[data-single-assistant]");
+    if (!assistants.length) return;
+
+    function formatMoney(amount) {
+        const safe = Number.isFinite(amount) ? amount : 0;
+        try {
+            return new Intl.NumberFormat("de-DE", {
+                style: "currency",
+                currency: "EUR",
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }).format(safe);
+        } catch (_error) {
+            return safe.toFixed(2).replace(".", ",") + " €";
+        }
+    }
+
+    assistants.forEach(function (assistant) {
+        const paymentId = Number.parseInt(assistant.dataset.paymentId || "", 10);
+        const endpoint =
+            (assistant.dataset.candidatesUrl || "").trim()
+            || (Number.isInteger(paymentId) ? ("/zahlungen/" + paymentId + "/manual/split/candidates") : "");
+
+        const searchInput = assistant.querySelector("[data-single-search]");
+        const searchBtn = assistant.querySelector("[data-single-search-btn]");
+        const refreshBtn = assistant.querySelector("[data-single-refresh-btn]");
+        const resultsEl = assistant.querySelector("[data-single-results]");
+
+        const section = assistant.closest("[data-manual-section]") || null;
+        const form = section ? section.querySelector("[data-manual-single-form]") : null;
+        const invoiceInput = section ? section.querySelector("[data-manual-single-invoice-input]") : null;
+        const nextInput = form ? form.querySelector("input[name='next']") : null;
+
+        if (!endpoint || !resultsEl || !invoiceInput) return;
+
+        let latestCandidates = [];
+        let hasLoadedInitially = false;
+
+        function setLoading(message) {
+            resultsEl.innerHTML = "";
+            const p = document.createElement("p");
+            p.className = "split-assistant-empty";
+            p.textContent = message;
+            resultsEl.appendChild(p);
+        }
+
+        function getSelectedInvoiceId() {
+            const parsed = Number.parseInt(String(invoiceInput.value || "").trim(), 10);
+            return Number.isInteger(parsed) ? parsed : null;
+        }
+
+        function renderResults(candidates, explicitMessage) {
+            resultsEl.innerHTML = "";
+            const list = Array.isArray(candidates) ? candidates : [];
+            const selectedInvoiceId = getSelectedInvoiceId();
+
+            if (!list.length) {
+                const empty = document.createElement("p");
+                empty.className = "split-assistant-empty";
+                empty.textContent = explicitMessage || "Keine passenden Rechnungen gefunden.";
+                resultsEl.appendChild(empty);
+                return;
+            }
+
+            list.forEach(function (candidate) {
+                const item = document.createElement("div");
+                item.className = "split-assistant-result";
+                if (selectedInvoiceId && candidate.invoice_id === selectedInvoiceId) {
+                    item.classList.add("is-selected");
+                }
+
+                const textWrap = document.createElement("div");
+                textWrap.className = "split-assistant-result-content";
+
+                const title = document.createElement("strong");
+                title.textContent = "#" + candidate.invoice_id + " · " + (candidate.name || "—");
+                textWrap.appendChild(title);
+
+                const meta = document.createElement("span");
+                meta.textContent =
+                    "Status: " + (candidate.status || "Offen")
+                    + " · Restbetrag: " + formatMoney(Number(candidate.open_amount || 0))
+                    + " · Vorschlag: " + formatMoney(Number(candidate.suggested_amount || 0));
+                textWrap.appendChild(meta);
+
+                if (Array.isArray(candidate.reasons) && candidate.reasons.length) {
+                    const reasons = document.createElement("span");
+                    reasons.className = "split-assistant-reasons";
+                    reasons.textContent = candidate.reasons.join(" · ");
+                    textWrap.appendChild(reasons);
+                }
+
+                item.appendChild(textWrap);
+
+                const applyBtn = document.createElement("button");
+                applyBtn.type = "button";
+                applyBtn.className = "btn btn-secondary split-assistant-add";
+                applyBtn.textContent = candidate.invoice_id === selectedInvoiceId ? "Aktualisieren" : "Übernehmen";
+                applyBtn.addEventListener("click", function () {
+                    invoiceInput.value = String(candidate.invoice_id);
+                    invoiceInput.dispatchEvent(new Event("input", { bubbles: true }));
+                    invoiceInput.dispatchEvent(new Event("change", { bubbles: true }));
+                    renderResults(latestCandidates);
+                    invoiceInput.focus();
+                });
+                item.appendChild(applyBtn);
+
+                resultsEl.appendChild(item);
+            });
+        }
+
+        async function loadCandidates(query) {
+            setLoading("Vorschläge werden geladen…");
+            const url = new URL(endpoint, window.location.origin);
+            url.searchParams.set("limit", "24");
+            const cleanedQuery = String(query || "").trim();
+            if (cleanedQuery) {
+                url.searchParams.set("q", cleanedQuery);
+            }
+
+            try {
+                const response = await fetch(url.toString(), {
+                    method: "GET",
+                    headers: { Accept: "application/json" },
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload || payload.ok === false) {
+                    throw new Error((payload && payload.error) || ("HTTP " + response.status));
+                }
+                latestCandidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+                const noResultMessage = cleanedQuery
+                    ? "Keine Treffer für \"" + cleanedQuery + "\"."
+                    : "Keine Vorschläge verfügbar.";
+                renderResults(latestCandidates, noResultMessage);
+            } catch (error) {
+                latestCandidates = [];
+                renderResults([], "Vorschläge konnten nicht geladen werden: " + (error && error.message ? error.message : "Unbekannter Fehler"));
+            }
+        }
+
+        function ensureInitialLoad() {
+            if (hasLoadedInitially) return;
+            hasLoadedInitially = true;
+            loadCandidates("");
+        }
+
+        if (searchBtn && searchInput) {
+            searchBtn.addEventListener("click", function () {
+                loadCandidates(searchInput.value);
+            });
+            searchInput.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    loadCandidates(searchInput.value);
+                }
+            });
+        }
+
+        if (refreshBtn && searchInput) {
+            refreshBtn.addEventListener("click", function () {
+                searchInput.value = "";
+                loadCandidates("");
+            });
+        }
+
+        if (invoiceInput) {
+            invoiceInput.addEventListener("input", function () {
+                renderResults(latestCandidates);
+            });
+        }
+
+        if (form) {
+            form.addEventListener("submit", function () {
+                if (nextInput) {
+                    nextInput.value = buildNextUrlWithScroll(nextInput.value, form);
+                }
+            });
+        }
+
+        const body = assistant.closest("[data-manual-body]") || null;
+        if (body && body.hidden) {
+            setLoading("Assistent anzeigen, um Vorschläge zu laden…");
+            if (section) {
+                section.addEventListener("manual-section-toggle", function (event) {
+                    if (event && event.detail && event.detail.expanded) {
+                        ensureInitialLoad();
+                    }
+                });
+            }
+        } else {
+            ensureInitialLoad();
+        }
+    });
+}
+
+function initManualAssignmentSections() {
+    const sections = document.querySelectorAll("[data-manual-section]");
+    if (!sections.length) return;
+
+    sections.forEach(function (section) {
+        const toggleBtn = section.querySelector("[data-manual-toggle]");
+        const body = section.querySelector("[data-manual-body]");
+        if (!toggleBtn || !body) return;
+
+        function setExpanded(expanded) {
+            section.classList.toggle("is-expanded", expanded);
+            body.hidden = !expanded;
+            toggleBtn.setAttribute("aria-expanded", String(expanded));
+
+            const openLabel = toggleBtn.dataset.openLabel || "Assistent anzeigen";
+            const closeLabel = toggleBtn.dataset.closeLabel || "Assistent ausblenden";
+            toggleBtn.textContent = expanded ? closeLabel : openLabel;
+
+            section.dispatchEvent(new CustomEvent("manual-section-toggle", {
+                bubbles: true,
+                detail: { expanded: expanded },
+            }));
+        }
+
+        const initiallyExpanded = section.dataset.expanded === "1";
+        setExpanded(initiallyExpanded);
+
+        toggleBtn.addEventListener("click", function () {
+            setExpanded(body.hidden);
+        });
+    });
+}
+
 function normalizeHexColor(value) {
     const raw = String(value || "").trim();
     if (!raw) return "";
@@ -831,6 +1498,9 @@ document.addEventListener("DOMContentLoaded", function () {
     initInlineStatusEditors();
     initInlineReminderEditors();
     initInlineRemarkEditors();
+    initManualAssignmentSections();
+    initManualSingleAssistant();
+    initManualSplitAssistant();
     initSettingsStatusManager();
 
     // === Drag & Drop + File Select for Upload ===

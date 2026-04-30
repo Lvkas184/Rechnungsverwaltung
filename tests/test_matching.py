@@ -35,6 +35,14 @@ def test_extract_invoice_number_long_truncated():
     assert result == 250590
 
 
+def test_extract_invoice_number_12digit_with_marker_digit_maps_to_first6():
+    assert extract_invoice_number("SVWZ+RE. NR. 261085194451") == 261085
+
+
+def test_extract_invoice_number_12digit_without_marker_digit_is_ignored():
+    assert extract_invoice_number("SVWZ+RE. NR. 261085294451") is None
+
+
 def test_extract_invoice_numbers_multiple():
     assert extract_invoice_numbers("SVWZ+260643 +260644") == [260643, 260644]
 

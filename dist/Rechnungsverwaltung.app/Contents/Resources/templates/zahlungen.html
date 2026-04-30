@@ -82,7 +82,7 @@
         <tbody>
             {% for p in payments %}
             {% set eff_status = payment_effective_status(p) %}
-            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('zahlung_detail', payment_id=p.payment_id) }}')">
+            <tr class="clickable-row" onclick="rowNavigate(event, '{{ url_for('zahlung_detail', payment_id=p.payment_id, next=current_list_url) }}')">
                 <td class="col-id">{{ p.payment_id }}</td>
                 <td class="col-source"><span class="badge">{{ p.source or "—" }}</span></td>
                 <td class="col-date">{{ p.booking_date | format_date }}</td>

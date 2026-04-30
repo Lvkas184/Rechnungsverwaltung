@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Rechnungsverwaltung — Rechnungen, Zahlungen und Mahnungen verwalten">
     <title>{% block title %}Rechnungsverwaltung{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='20260415-layout') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -48,9 +48,9 @@
                     <span class="nav-link-icon material-symbols-outlined">file_upload</span>
                     <span class="nav-link-text">Import</span>
                 </a>
-                <a href="{{ url_for('zuordnungen') }}" class="nav-link {% if request.endpoint == 'zuordnungen' %}active{% endif %}" title="Zuordnungen">
-                    <span class="nav-link-icon material-symbols-outlined">assignment_turned_in</span>
-                    <span class="nav-link-text">Zuordnungen</span>
+                <a href="{{ url_for('steuerbuero') }}" class="nav-link {% if request.endpoint == 'steuerbuero' %}active{% endif %}" title="Steuerbüro">
+                    <span class="nav-link-icon material-symbols-outlined">support_agent</span>
+                    <span class="nav-link-text">Steuerbüro</span>
                 </a>
                 <a href="{{ url_for('einstellungen') }}" class="nav-link {% if request.endpoint == 'einstellungen' %}active{% endif %}" title="Einstellungen">
                     <span class="nav-link-icon material-symbols-outlined">settings</span>
@@ -101,6 +101,6 @@
     </div>
     </div>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v='20260415-layout') }}"></script>
 </body>
 </html>

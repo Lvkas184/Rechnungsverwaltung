@@ -74,6 +74,36 @@ CREATE TABLE IF NOT EXISTS audit_log (
   FOREIGN KEY(invoice_id) REFERENCES invoices(invoice_id)
 );
 
+CREATE TABLE IF NOT EXISTS manual_change_log (
+  change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_audit_id INTEGER UNIQUE,
+  entry_origin TEXT NOT NULL DEFAULT 'auto',
+  is_resolved INTEGER DEFAULT 0,
+  resolved_at TEXT,
+  change_scope TEXT NOT NULL,
+  invoice_id INTEGER,
+  payment_id INTEGER,
+  action_code TEXT NOT NULL,
+  action_label TEXT NOT NULL,
+  before_value TEXT,
+  after_value TEXT,
+  note TEXT,
+  changed_by TEXT,
+  changed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(invoice_id) REFERENCES invoices(invoice_id),
+  FOREIGN KEY(payment_id) REFERENCES payments(payment_id),
+  FOREIGN KEY(source_audit_id) REFERENCES audit_log(audit_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_manual_change_log_changed_at
+  ON manual_change_log(changed_at);
+
+CREATE INDEX IF NOT EXISTS idx_manual_change_log_invoice
+  ON manual_change_log(invoice_id);
+
+CREATE INDEX IF NOT EXISTS idx_manual_change_log_payment
+  ON manual_change_log(payment_id);
+
 CREATE TABLE IF NOT EXISTS invoice_reminders (
   reminder_entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
   invoice_id INTEGER NOT NULL,

@@ -43,26 +43,66 @@ def _parse_date(value):
 
 
 def _parse_amount(value):
-    """Parse German amount (1.234,56) or plain float."""
+    """Parse amounts from bank/datev CSV robustly.
+
+    Supported patterns include:
+    - German: 1.234,56 / 297,5 / -1.000
+    - Plain decimal: 1234.56 / -1234.56
+    - Grouped thousands without cents: 17.850 / 1.000
+    """
     if value is None:
         return None
     if isinstance(value, (int, float)):
         return float(value)
-    value = str(value).strip()
-    if not value:
+
+    raw = str(value).strip()
+    if not raw:
         return None
-    # German: 1.234,56  →  1234.56
-    if "," in value and "." in value:
-        if value.index(".") < value.index(","):
-            value = value.replace(".", "").replace(",", ".")
+
+    # Remove spaces/currency and keep only numeric separators/signs.
+    raw = raw.replace("\u00a0", "").replace("\u202f", "")
+    raw = re.sub(r"[€\s]", "", raw)
+    raw = re.sub(r"[^\d,.\-+()]", "", raw)
+    if not raw:
+        return None
+
+    sign = 1.0
+    if raw.startswith("(") and raw.endswith(")"):
+        sign = -1.0
+        raw = raw[1:-1]
+    if raw.startswith("+"):
+        raw = raw[1:]
+    if raw.startswith("-"):
+        sign *= -1.0
+        raw = raw[1:]
+    if raw.endswith("-"):
+        sign *= -1.0
+        raw = raw[:-1]
+    if not raw:
+        return None
+
+    def is_grouped_thousands(text, sep):
+        parts = text.split(sep)
+        if len(parts) < 2:
+            return False
+        if not parts[0].isdigit() or len(parts[0]) > 3:
+            return False
+        return all(p.isdigit() and len(p) == 3 for p in parts[1:])
+
+    normalized = raw
+    if "," in raw and "." in raw:
+        # Decide by last separator: German 1.234,56 vs. Intl 1,234.56
+        if raw.rfind(",") > raw.rfind("."):
+            normalized = raw.replace(".", "").replace(",", ".")
         else:
-            value = value.replace(",", "")
-    elif "," in value:
-        value = value.replace(",", ".")
-    # Remove currency symbols
-    value = re.sub(r"[€\s]", "", value)
+            normalized = raw.replace(",", "")
+    elif "," in raw:
+        normalized = raw.replace(",", "") if is_grouped_thousands(raw, ",") else raw.replace(",", ".")
+    elif "." in raw:
+        normalized = raw.replace(".", "") if is_grouped_thousands(raw, ".") else raw
+
     try:
-        return float(value)
+        return sign * float(normalized)
     except ValueError:
         return None
 

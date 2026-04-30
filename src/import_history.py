@@ -376,6 +376,34 @@ def fetch_import_batches(limit=25, db_path=None):
         for batch in batches:
             batch_id = int(batch["import_batch_id"])
             previews = grouped_items.get(batch_id, [])
+            inserted_rechnungen = sum(
+                1
+                for item in previews
+                if item["entity_type"] == "invoice"
+                and item["action"] == "insert"
+                and item.get("display_type") == "Rechnung"
+            )
+            inserted_gutschriften = sum(
+                1
+                for item in previews
+                if item["entity_type"] == "invoice"
+                and item["action"] == "insert"
+                and item.get("display_type") == "Gutschrift"
+            )
+            updated_rechnungen = sum(
+                1
+                for item in previews
+                if item["entity_type"] == "invoice"
+                and item["action"] == "update"
+                and item.get("display_type") == "Rechnung"
+            )
+            updated_gutschriften = sum(
+                1
+                for item in previews
+                if item["entity_type"] == "invoice"
+                and item["action"] == "update"
+                and item.get("display_type") == "Gutschrift"
+            )
             inserted_invoices = sum(
                 1 for item in previews if item["entity_type"] == "invoice" and item["action"] == "insert"
             )
@@ -389,6 +417,10 @@ def fetch_import_batches(limit=25, db_path=None):
                 {
                     **_row_to_dict(batch),
                     "items": previews,
+                    "inserted_rechnungen": inserted_rechnungen,
+                    "inserted_gutschriften": inserted_gutschriften,
+                    "updated_rechnungen": updated_rechnungen,
+                    "updated_gutschriften": updated_gutschriften,
                     "inserted_invoices": inserted_invoices,
                     "updated_invoices": updated_invoices,
                     "inserted_payments": inserted_payments,

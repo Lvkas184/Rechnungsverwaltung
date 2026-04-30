@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Steuerbüro-Änderungen — Rechnungsverwaltung{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+    <div>
+        <p class="page-kicker">Steuerbüro</p>
+        <h1>Manuelle Änderungen <span class="count-badge">{{ total }}</span></h1>
+        <p class="page-desc">
+            Monatsübersicht aller Änderungen für die Abstimmung mit dem Steuerbüro.
+            Offene Punkte bleiben sichtbar, erledigte Punkte können abgehakt werden.
+        </p>
+    </div>
+</div>
+
+<div class="card steuerbuero-toolbar-card">
+    <h2>Ansicht</h2>
+    <form method="GET" class="inline-form steuerbuero-filter-form">
+        <div class="form-group steuerbuero-month-field">
+            <label for="month">Monat</label>
+            <select id="month" name="month" class="form-input">
+                {% for item in month_options %}
+                <option value="{{ item.key }}" {{ "selected" if item.key == selected_month else "" }}>
+                    {{ item.label }} ({{ item.count }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group steuerbuero-status-field">
+            <label for="status">Status</label>
+            <select id="status" name="status" class="form-input">
+                <option value="open" {{ "selected" if status_filter == "open" }}>Offene Punkte</option>
+                <option value="resolved" {{ "selected" if status_filter == "resolved" }}>Nur abgehakt</option>
+                <option value="all" {{ "selected" if status_filter == "all" }}>Alle</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Anzeigen</button>
+    </form>
+    <div class="steuerbuero-summary-pills">
+        <span class="steuerbuero-summary-pill">Offen: <strong>{{ open_count }}</strong></span>
+        <span class="steuerbuero-summary-pill">Abgehakt: <strong>{{ resolved_count }}</strong></span>
+    </div>
+</div>
+
+<div class="card steuerbuero-add-card">
+    <h2>Eintrag hinzufügen</h2>
+    <form method="POST" action="{{ url_for('steuerbuero_add_entry') }}" class="steuerbuero-add-form-clean">
+        <input type="hidden" name="month" value="{{ selected_month }}">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+
+        <div class="steuerbuero-add-grid">
+            <div class="form-group steuerbuero-action-label-field">
+                <label for="add_action_label">Änderung</label>
+                <input id="add_action_label" name="action_label" class="form-input" placeholder="z.B. Rechnungssumme angepasst" required>
+            </div>
+            <div class="form-group">
+                <label for="add_change_scope">Bereich</label>
+                <select id="add_change_scope" name="change_scope" class="form-input">
+                    <option value="invoice">Rechnung</option>
+                    <option value="payment">Zahlung</option>
+                    <option value="note" selected>Allgemein</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="add_invoice_id">Rechnung-ID (optional)</label>
+                <input id="add_invoice_id" type="number" name="invoice_id" class="form-input" placeholder="z.B. 261085">
+            </div>
+            <div class="form-group">
+                <label for="add_payment_id">Zahlung-ID (optional)</label>
+                <input id="add_payment_id" type="number" name="payment_id" class="form-input" placeholder="z.B. 2660">
+            </div>
+            <div class="form-group">
+                <label for="add_changed_at">Zeitpunkt</label>
+                <input id="add_changed_at" type="datetime-local" name="changed_at" class="form-input" value="{{ default_changed_at }}">
+            </div>
+        </div>
+
+        <details class="steuerbuero-optional-fields">
+            <summary>Optionale Details</summary>
+            <div class="steuerbuero-optional-grid">
+                <div class="form-group">
+                    <label for="add_before_value">Vorher</label>
+                    <textarea id="add_before_value" name="before_value" class="form-input" rows="2" placeholder="Alter Zustand"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="add_after_value">Nachher</label>
+                    <textarea id="add_after_value" name="after_value" class="form-input" rows="2" placeholder="Neuer Zustand"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="add_note">Hinweis</label>
+                    <textarea id="add_note" name="note" class="form-input" rows="2" placeholder="Info fürs Gespräch"></textarea>
+                </div>
+            </div>
+        </details>
+
+        <div class="steuerbuero-add-actions">
+            <label class="steuerbuero-inline-check">
+                <input type="checkbox" name="is_resolved" value="1">
+                Direkt als abgehakt markieren
+            </label>
+            <button type="submit" class="btn btn-primary">Eintrag hinzufügen</button>
+        </div>
+    </form>
+</div>
+
+{% if changes %}
+<div class="card">
+    <h2>Änderungen in {{ selected_month_label }}</h2>
+
+    <div class="steuerbuero-list">
+        {% for change in changes %}
+        {% set changed_at_local = (change.changed_at or '')|replace(' ', 'T') %}
+        {% set scope_key = (change.change_scope or 'note') %}
+        <article class="steuerbuero-item {{ 'is-resolved' if change.is_resolved else 'is-open' }}">
+            <div class="steuerbuero-item-head">
+                <div class="steuerbuero-item-title-wrap">
+                    <h3>{{ change.action_label }}</h3>
+                    <p class="steuerbuero-item-meta">
+                        <span>{{ change.changed_at | format_datetime }}</span>
+                        <span>·</span>
+                        {% if scope_key == 'invoice' %}
+                        <span>Bereich: Rechnung</span>
+                        {% elif scope_key == 'payment' %}
+                        <span>Bereich: Zahlung</span>
+                        {% else %}
+                        <span>Bereich: Allgemein</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="steuerbuero-item-badges">
+                    {% if (change.entry_origin or "auto") == "manual" %}
+                    <span class="status-badge status-bezahlt">Manuell</span>
+                    {% else %}
+                    <span class="status-badge status-ausgebucht">Automatisch</span>
+                    {% endif %}
+
+                    {% if change.is_resolved %}
+                    <span class="status-badge status-bezahlt">Abgehakt</span>
+                    {% else %}
+                    <span class="status-badge status-offen">Offen</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="steuerbuero-item-links">
+                {% if change.invoice_id %}
+                <a href="{{ url_for('rechnung_detail', invoice_id=change.invoice_id, doc_type=(change.invoice_document_type or 'rechnung')) }}">
+                    Rechnung #{{ change.invoice_id }}
+                </a>
+                {% endif %}
+                {% if change.payment_id %}
+                <a href="{{ url_for('zahlung_detail', payment_id=change.payment_id) }}">
+                    Zahlung #{{ change.payment_id }}
+                </a>
+                {% endif %}
+                {% if not change.invoice_id and not change.payment_id %}
+                <span>Kein direkter Bezug</span>
+                {% endif %}
+            </div>
+
+            {% if change.before_value or change.after_value or change.note %}
+            <div class="steuerbuero-delta-grid">
+                {% if change.before_value %}
+                <div class="steuerbuero-delta-box">
+                    <p class="steuerbuero-delta-label">Vorher</p>
+                    <p class="steuerbuero-delta-value">{{ change.before_value }}</p>
+                </div>
+                {% endif %}
+                {% if change.after_value %}
+                <div class="steuerbuero-delta-box">
+                    <p class="steuerbuero-delta-label">Nachher</p>
+                    <p class="steuerbuero-delta-value">{{ change.after_value }}</p>
+                </div>
+                {% endif %}
+                {% if change.note %}
+                <div class="steuerbuero-delta-box">
+                    <p class="steuerbuero-delta-label">Hinweis</p>
+                    <p class="steuerbuero-delta-value">{{ change.note }}</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="steuerbuero-item-actions">
+                <form method="POST" action="{{ url_for('steuerbuero_toggle_resolved') }}" class="steuerbuero-action-form">
+                    <input type="hidden" name="change_id" value="{{ change.change_id }}">
+                    <input type="hidden" name="month" value="{{ selected_month }}">
+                    <input type="hidden" name="status" value="{{ status_filter }}">
+                    <input type="hidden" name="resolved" value="{{ 0 if change.is_resolved else 1 }}">
+                    <button type="submit" class="btn btn-secondary btn-small">
+                        {{ "Offen lassen" if change.is_resolved else "Abhaken" }}
+                    </button>
+                </form>
+
+                <details class="steuerbuero-edit-details">
+                    <summary class="btn btn-secondary btn-small">Bearbeiten</summary>
+                    <form method="POST" action="{{ url_for('steuerbuero_update_entry') }}" class="steuerbuero-edit-form-clean">
+                        <input type="hidden" name="change_id" value="{{ change.change_id }}">
+                        <input type="hidden" name="month" value="{{ selected_month }}">
+                        <input type="hidden" name="status" value="{{ status_filter }}">
+
+                        <div class="steuerbuero-edit-grid">
+                            <label>Änderung
+                                <input name="action_label" class="form-input" value="{{ change.action_label }}" required>
+                            </label>
+                            <label>Bereich
+                                <select name="change_scope" class="form-input">
+                                    <option value="invoice" {{ "selected" if scope_key == "invoice" else "" }}>Rechnung</option>
+                                    <option value="payment" {{ "selected" if scope_key == "payment" else "" }}>Zahlung</option>
+                                    <option value="note" {{ "selected" if scope_key not in ["invoice", "payment"] else "" }}>Allgemein</option>
+                                </select>
+                            </label>
+                            <label>Rechnung-ID
+                                <input type="number" name="invoice_id" class="form-input" value="{{ change.invoice_id or '' }}">
+                            </label>
+                            <label>Zahlung-ID
+                                <input type="number" name="payment_id" class="form-input" value="{{ change.payment_id or '' }}">
+                            </label>
+                            <label>Zeitpunkt
+                                <input type="datetime-local" name="changed_at" class="form-input" value="{{ changed_at_local[:16] if changed_at_local else '' }}">
+                            </label>
+                        </div>
+
+                        <div class="steuerbuero-edit-grid steuerbuero-edit-grid-wide">
+                            <label>Vorher
+                                <textarea name="before_value" class="form-input" rows="2">{{ change.before_value or '' }}</textarea>
+                            </label>
+                            <label>Nachher
+                                <textarea name="after_value" class="form-input" rows="2">{{ change.after_value or '' }}</textarea>
+                            </label>
+                            <label>Hinweis
+                                <textarea name="note" class="form-input" rows="2">{{ change.note or '' }}</textarea>
+                            </label>
+                        </div>
+
+                        <div class="steuerbuero-edit-actions">
+                            <label class="steuerbuero-inline-check">
+                                <input type="checkbox" name="is_resolved" value="1" {{ "checked" if change.is_resolved else "" }}>
+                                Als abgehakt markieren
+                            </label>
+                            <button type="submit" class="btn btn-primary btn-small">Speichern</button>
+                        </div>
+                    </form>
+                </details>
+
+                <form method="POST" action="{{ url_for('steuerbuero_delete_entry') }}" class="steuerbuero-action-form">
+                    <input type="hidden" name="change_id" value="{{ change.change_id }}">
+                    <input type="hidden" name="month" value="{{ selected_month }}">
+                    <input type="hidden" name="status" value="{{ status_filter }}">
+                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Eintrag wirklich löschen?')">Löschen</button>
+                </form>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>Für {{ selected_month_label }} wurden in dieser Ansicht keine Einträge gefunden.</p>
+</div>
+{% endif %}
+{% endblock %}

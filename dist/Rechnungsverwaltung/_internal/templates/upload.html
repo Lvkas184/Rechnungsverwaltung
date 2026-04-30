@@ -111,11 +111,17 @@
                         {% if batch.row_count_skipped %}
                         · {{ batch.row_count_skipped }} übersprungen
                         {% endif %}
-                        {% if batch.inserted_invoices %}
-                        · {{ batch.inserted_invoices }} neue Rechnung(en)
+                        {% if batch.inserted_rechnungen %}
+                        · {{ batch.inserted_rechnungen }} neue Rechnung(en)
                         {% endif %}
-                        {% if batch.updated_invoices %}
-                        · {{ batch.updated_invoices }} aktualisierte Rechnung(en)
+                        {% if batch.inserted_gutschriften %}
+                        · {{ batch.inserted_gutschriften }} neue Gutschrift(en)
+                        {% endif %}
+                        {% if batch.updated_rechnungen %}
+                        · {{ batch.updated_rechnungen }} aktualisierte Rechnung(en)
+                        {% endif %}
+                        {% if batch.updated_gutschriften %}
+                        · {{ batch.updated_gutschriften }} aktualisierte Gutschrift(en)
                         {% endif %}
                         {% if batch.inserted_payments %}
                         · {{ batch.inserted_payments }} Zahlung(en)
@@ -154,7 +160,7 @@
                     <tbody>
                         {% for item in batch["items"] %}
                         <tr>
-                            <td>{{ "Rechnung" if item.entity_type == "invoice" else "Zahlung" }}</td>
+                            <td>{{ item.display_type or ("Rechnung" if item.entity_type == "invoice" else "Zahlung") }}</td>
                             <td>{{ item.entity_id }}</td>
                             <td>{{ "Neu" if item.action == "insert" else "Aktualisiert" }}</td>
                             <td>{{ item.subtitle or "—" }}</td>
